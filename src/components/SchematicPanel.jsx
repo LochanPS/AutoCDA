@@ -36,7 +36,7 @@ const FALLBACK_SVGS = {
   <line x1="286" y1="170" x2="286" y2="156" class="wire"/>
 </svg>`,
 
-  rc_highpass: `<svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+  rc_highpass: `<svg viewBox="0 0 400 200" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
   <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
   <!-- Voltage source -->
   <circle cx="40" cy="120" r="20" class="sym"/>
@@ -100,7 +100,7 @@ const FALLBACK_SVGS = {
   <line x1="50" y1="210" x2="280" y2="210" class="wire"/>
 </svg>`,
 
-  led_limiter: `<svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+  led_limiter: `<svg viewBox="0 0 400 200" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
   <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
   <!-- Voltage source -->
   <circle cx="40" cy="110" r="20" class="sym"/>

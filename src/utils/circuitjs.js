@@ -25,9 +25,10 @@ function makeEmbed(circuitText) {
 
 function rcLowpassText(R, C) {
   // V(AC) → R1(horizontal) → node → C1(vertical to GND) → Vout at node
+  const fc = Math.round(1 / (2 * Math.PI * R * C));
   return [
     HEADER,
-    `v 192 352 192 48 0 1 40 5 0 0 0.5`,      // AC source
+    `v 192 352 192 48 0 1 ${fc} 5 0 0 0.5`,   // AC source at cutoff frequency
     `r 192 48 400 48 0 ${R}`,                  // R1 horizontal
     `c 400 48 400 352 0 ${C} 0 0.01`,          // C1 vertical
     `g 192 352 192 400 0 0`,                   // GND left
@@ -38,9 +39,10 @@ function rcLowpassText(R, C) {
 
 function rcHighpassText(R, C) {
   // V(AC) → C1(horizontal) → node → R1(vertical to GND) → Vout at node
+  const fc = Math.round(1 / (2 * Math.PI * R * C));
   return [
     HEADER,
-    `v 192 352 192 48 0 1 40 5 0 0 0.5`,
+    `v 192 352 192 48 0 1 ${fc} 5 0 0 0.5`,   // AC source at cutoff frequency
     `c 192 48 400 48 0 ${C} 0 0.01`,           // C1 horizontal
     `r 400 48 400 352 0 ${R}`,                  // R1 vertical
     `g 192 352 192 400 0 0`,
@@ -114,9 +116,12 @@ function commonEmitterText(RC, RE) {
 }
 
 function bandPassText(R, C1, C2) {
+  const fH = 1 / (2 * Math.PI * R * C1);
+  const fL = 1 / (2 * Math.PI * R * C2);
+  const fc = Math.round(Math.sqrt(fH * fL));
   return [
     HEADER,
-    `v 96 352 96 48 0 1 40 5 0 0 0.5`,
+    `v 96 352 96 48 0 1 ${fc} 5 0 0 0.5`,     // AC source at center frequency
     `c 96 48 256 48 0 ${C1} 0 0.01`,    // HP cap
     `r 256 48 256 352 0 ${R}`,           // HP shunt R
     `r 256 48 400 48 0 ${R}`,            // LP series R (reuse same node)
@@ -129,12 +134,13 @@ function bandPassText(R, C1, C2) {
 }
 
 function opampInvertingText(R1, Rf) {
+  const testFreq = 1000; // 1 kHz test frequency
   return [
     HEADER,
-    `v 96 352 96 48 0 1 1000 0.1 0 0 0.5`,    // 1kHz AC input
-    `r 96 176 256 176 0 ${R1}`,                // R1 input resistor
-    `r 256 80 400 80 0 ${Rf}`,                 // Rf feedback
-    `a 256 160 400 160 8 15 -15 1000000 0`,    // op-amp (inverting)
+    `v 96 352 96 48 0 1 ${testFreq} 0.1 0 0 0.5`,    // AC input at test frequency
+    `r 96 176 256 176 0 ${R1}`,                        // R1 input resistor
+    `r 256 80 400 80 0 ${Rf}`,                         // Rf feedback
+    `a 256 160 400 160 8 15 -15 1000000 0`,            // op-amp (inverting)
     `w 256 176 256 160 0`,
     `w 96 352 96 400 0`,
     `g 96 400 96 448 0 0`,
@@ -144,14 +150,15 @@ function opampInvertingText(R1, Rf) {
 }
 
 function opampNoninvertingText(R1, Rf) {
+  const testFreq = 1000; // 1 kHz test frequency
   return [
     HEADER,
-    `v 96 352 96 192 0 1 1000 0.1 0 0 0.5`,   // AC input
-    `r 256 240 256 352 0 ${R1}`,               // R1 to ground
-    `r 256 240 400 240 0 ${Rf}`,               // Rf feedback
-    `a 256 224 400 224 8 15 -15 1000000 0`,    // op-amp
+    `v 96 352 96 192 0 1 ${testFreq} 0.1 0 0 0.5`,   // AC input at test frequency
+    `r 256 240 256 352 0 ${R1}`,                      // R1 to ground
+    `r 256 240 400 240 0 ${Rf}`,                      // Rf feedback
+    `a 256 224 400 224 8 15 -15 1000000 0`,           // op-amp
     `w 96 192 256 192 0`,
-    `w 256 192 256 224 0`,                     // to non-inv input
+    `w 256 192 256 224 0`,                            // to non-inv input
     `g 96 352 96 400 0 0`,
     `g 256 352 256 400 0 0`,
     `o 3 64 3 4099 1 0.00009765625 0 2 3 3`,
@@ -170,6 +177,7 @@ function zenerText(Vin, R, Vz) {
 }
 
 function wienBridgeText(R, C) {
+  const f_osc = Math.round(1 / (2 * Math.PI * R * C));
   return [
     HEADER,
     // Simplified Wien bridge (approximation in CircuitJS)
