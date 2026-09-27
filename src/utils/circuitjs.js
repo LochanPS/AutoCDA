@@ -78,33 +78,41 @@ function ledLimiterText(Vsupply, R) {
 }
 
 function commonEmitterText(RC, RE) {
-  // Full common emitter with bias divider
-  // VCC=12V, R1=100k, R2=20k bias, RC collector, RE emitter, coupling cap
+  // Full common emitter with bias divider.
+  // VCC=12V, R1=100k, R2=20k bias, RC collector, RE emitter, coupling cap.
+  //
+  // Node geometry (all junctions land on shared element POSTS — Falstad only
+  // connects where posts coincide, never mid-element or mid-wire):
+  //   BJT `t 368 256 448 256` → base=(368,256), collector=(448,240),
+  //   emitter=(448,272)  [Falstad transistor leads are ±16px from the body].
+  //   RC bottom post = collector post (448,240); RE top post = emitter post
+  //   (448,272). Bias divider node = base level (256,256): R1 bottom, R2 top,
+  //   coupling cap and the base wire all meet there.
+  //   The VCC rail is split at x=256 so R1's top post shares a wire endpoint.
   return [
     HEADER,
-    // VCC supply
+    // VCC supply (DC 12V), left side
     `v 96 448 96 48 0 0 40 12 0 0 0.5`,
-    // Collector resistor RC (VCC to collector)
-    `r 448 48 448 208 0 ${RC}`,
-    // Top rail wire
-    `w 96 48 448 48 0`,
-    // BJT NPN at (448, 256): collector=208, base=256, emitter=304
+    // Top VCC rail, split so junctions are at wire endpoints (256,48) & (448,48)
+    `w 96 48 256 48 0`,
+    `w 256 48 448 48 0`,
+    // Collector resistor RC: rail(448,48) → collector post(448,240)
+    `r 448 48 448 240 0 ${RC}`,
+    // BJT NPN: base(368,256), collector(448,240), emitter(448,272)
     `t 368 256 448 256 0 1 100 0.02 1`,
-    // Emitter resistor RE
-    `r 448 304 448 448 0 ${RE}`,
-    // GND
+    // Emitter resistor RE: emitter post(448,272) → gnd node(448,448)
+    `r 448 272 448 448 0 ${RE}`,
+    // Grounds
     `g 96 448 96 496 0 0`,
     `g 448 448 448 496 0 0`,
-    // Base bias R1 (VCC to base node)
-    `r 96 48 256 48 0 100000`,
-    `r 256 48 256 448 0 20000`,
+    // Bias divider: R1 rail→base node, R2 base node→bottom rail
+    `r 256 48 256 256 0 100000`,
+    `r 256 256 256 448 0 20000`,
+    // Bottom rail: R2 bottom(256,448) → VCC bottom / gnd(96,448)
     `w 256 448 96 448 0`,
-    // Bias → base connection
-    `w 256 208 256 256 0`,
+    // Base node(256,256) → base terminal(368,256)
     `w 256 256 368 256 0`,
-    // Wire junction at bias mid
-    `w 96 48 256 48 0`,
-    // Coupling cap input
+    // Coupling cap: AC input(160,256) → base node(256,256)
     `c 160 256 256 256 0 1e-5 0 0.01`,
     // AC input source
     `v 96 304 96 256 0 1 1000 0.1 0 0 0.5`,

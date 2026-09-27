@@ -58,16 +58,31 @@ export function parseDisplayValue(display, hint) {
 
 // ── formula functions ────────────────────────────────────────────────────────
 
+// TODO(Phase 2): replace this analytical self-check with a REAL ngspice-wasm run.
+// Every circuit below recomputes its answer from the SAME closed-form equation it
+// used to size the parts, so the "measured" value is identical to the target by
+// construction and any error percentage would always be ~0. That is NOT a
+// simulation, so we never claim a simulator ran and never print an error figure.
+// Real measured-vs-target error (snapped E-series values vs SPICE) arrives in
+// Phase 2 — see src/sim/spice.js + src/design/loop.js and docs/ROADMAP.md.
+const analyticalBadge = (summary) => `⚙ ${summary} · Analytical (not yet SPICE-verified)`;
+const analyticalSteps = (resultLine) => [
+  '[✓] SPICE netlist generated',
+  '[✓] Values computed from design equations (analytical)',
+  `[✓] Analytical result: ${resultLine}`,
+  '[○] SPICE verification pending — Phase 2 (ngspice-wasm)',
+  '[✓] Schematic rendered',
+];
+
 function rcLowpass({ fc = 1000, R = 1000 }) {
   const C = 1 / (2 * Math.PI * R * fc);
   const fcActual = 1 / (2 * Math.PI * R * C);
-  const errPct = Math.abs((fcActual - fc) / fc * 100).toFixed(1);
 
   return {
     id: 'rc_lowpass',
     name: 'RC Low-Pass Filter',
     schematic: '/schematics/rc_lowpass.svg',
-    simulationBadge: `✓ Simulation Passed — Error: ${errPct}%`,
+    simulationBadge: analyticalBadge(`fc = ${formatFrequency(fcActual)}`),
     components: [
       { ref: 'R1', rawValue: R,   unit: 'Ω', display: formatResistance(R),   description: 'Series Resistor',  editable: true },
       { ref: 'C1', rawValue: C,   unit: 'F', display: formatCapacitance(C),  description: 'Filter Capacitor', editable: true },
@@ -82,11 +97,7 @@ function rcLowpass({ fc = 1000, R = 1000 }) {
       '[✓] Formula applied: fc = 1 / (2πRC)',
       `[✓] R1 calculated: ${formatResistance(R)}`,
       `[✓] C1 calculated: ${formatCapacitance(C)}`,
-      '[✓] SPICE netlist generated',
-      '[✓] Ngspice simulation running...',
-      `[✓] Simulation complete — cutoff at ${formatFrequency(fcActual)}`,
-      `[✓] Verification passed — error: ${errPct}%`,
-      '[✓] Schematic rendered via Schemdraw',
+      ...analyticalSteps(`cutoff at ${formatFrequency(fcActual)}`),
     ],
     explanation: `An RC Low-Pass Filter was designed using the formula fc = 1/(2πRC). With a target cutoff frequency of ${formatFrequency(fc)} and a resistor value of ${formatResistance(R)}, the required capacitance was calculated as ${formatCapacitance(C)}. Signals below ${formatFrequency(fcActual)} pass through with minimal attenuation while higher frequencies are blocked at -20 dB per decade.`,
     netlist: `RC Low-Pass Filter — SPICE Netlist\n*AutoCDA Generated Netlist\nVin in 0 AC 1\nR1 in out ${formatResistance(R)}\nC1 out 0 ${formatCapacitance(C)}\n.AC DEC 100 10 100Meg\n.PROBE V(out)\n.END`,
@@ -96,13 +107,12 @@ function rcLowpass({ fc = 1000, R = 1000 }) {
 function rcHighpass({ fc = 500, R = 1000 }) {
   const C = 1 / (2 * Math.PI * R * fc);
   const fcActual = 1 / (2 * Math.PI * R * C);
-  const errPct = Math.abs((fcActual - fc) / fc * 100).toFixed(1);
 
   return {
     id: 'rc_highpass',
     name: 'RC High-Pass Filter',
     schematic: '/schematics/rc_highpass.svg',
-    simulationBadge: `✓ Simulation Passed — Error: ${errPct}%`,
+    simulationBadge: analyticalBadge(`fc = ${formatFrequency(fcActual)}`),
     components: [
       { ref: 'C1', rawValue: C, unit: 'F', display: formatCapacitance(C), description: 'Series Capacitor', editable: true },
       { ref: 'R1', rawValue: R, unit: 'Ω', display: formatResistance(R),  description: 'Shunt Resistor',   editable: true },
@@ -117,11 +127,7 @@ function rcHighpass({ fc = 500, R = 1000 }) {
       '[✓] Formula applied: fc = 1 / (2πRC)',
       `[✓] R1 selected: ${formatResistance(R)}`,
       `[✓] C1 calculated: ${formatCapacitance(C)}`,
-      '[✓] SPICE netlist generated',
-      '[✓] Ngspice simulation running...',
-      `[✓] Simulation complete — cutoff at ${formatFrequency(fcActual)}`,
-      `[✓] Verification passed — error: ${errPct}%`,
-      '[✓] Schematic rendered via Schemdraw',
+      ...analyticalSteps(`cutoff at ${formatFrequency(fcActual)}`),
     ],
     explanation: `An RC High-Pass Filter was designed using the formula fc = 1/(2πRC). With a cutoff frequency of ${formatFrequency(fc)} and R = ${formatResistance(R)}, the capacitance was calculated as ${formatCapacitance(C)}. Low-frequency signals are attenuated at -20 dB per decade below ${formatFrequency(fcActual)}.`,
     netlist: `RC High-Pass Filter — SPICE Netlist\n*AutoCDA Generated Netlist\nVin in 0 AC 1\nC1 in out ${formatCapacitance(C)}\nR1 out 0 ${formatResistance(R)}\n.AC DEC 100 10 100Meg\n.PROBE V(out)\n.END`,
@@ -131,13 +137,12 @@ function rcHighpass({ fc = 500, R = 1000 }) {
 function voltageDivider({ Vin = 12, Vout = 5, R2 = 1000 }) {
   const R1 = R2 * (Vin - Vout) / Vout;
   const VoutActual = Vin * R2 / (R1 + R2);
-  const errPct = Math.abs((VoutActual - Vout) / Vout * 100).toFixed(1);
 
   return {
     id: 'voltage_divider',
     name: 'Voltage Divider',
     schematic: '/schematics/voltage_divider.svg',
-    simulationBadge: `✓ Output Verified — Vout: ${formatVoltage(VoutActual)}`,
+    simulationBadge: analyticalBadge(`Vout = ${formatVoltage(VoutActual)}`),
     components: [
       { ref: 'R1', rawValue: R1, unit: 'Ω', display: formatResistance(R1), description: 'Upper Resistor', editable: true },
       { ref: 'R2', rawValue: R2, unit: 'Ω', display: formatResistance(R2), description: 'Lower Resistor', editable: true },
@@ -160,13 +165,9 @@ function voltageDivider({ Vin = 12, Vout = 5, R2 = 1000 }) {
       '[✓] Formula applied: Vout = Vin × R2 / (R1 + R2)',
       `[✓] R2 selected: ${formatResistance(R2)}`,
       `[✓] R1 calculated: ${formatResistance(R1)}`,
-      '[✓] SPICE netlist generated',
-      '[✓] Ngspice simulation running...',
-      `[✓] Simulation complete — Vout = ${formatVoltage(VoutActual)}`,
-      `[✓] Verification passed — error: ${errPct}%`,
-      '[✓] Schematic rendered via Schemdraw',
+      ...analyticalSteps(`Vout = ${formatVoltage(VoutActual)}`),
     ],
-    explanation: `A Voltage Divider was designed using Vout = Vin × R2/(R1+R2). To step down ${formatVoltage(Vin)} to ${formatVoltage(Vout)}, R1 = ${formatResistance(R1)} and R2 = ${formatResistance(R2)} were calculated. Actual output: ${formatVoltage(VoutActual)} (error ${errPct}%).`,
+    explanation: `A Voltage Divider was designed using Vout = Vin × R2/(R1+R2). To step down ${formatVoltage(Vin)} to ${formatVoltage(Vout)}, R1 = ${formatResistance(R1)} and R2 = ${formatResistance(R2)} were calculated. Computed output: ${formatVoltage(VoutActual)} (analytical, not yet SPICE-verified).`,
     netlist: `Voltage Divider — SPICE Netlist\n*AutoCDA Generated Netlist\nVin in 0 DC ${Vin}\nR1 in out ${formatResistance(R1)}\nR2 out 0 ${formatResistance(R2)}\n.DC Vin ${Vin} ${Vin} 1\n.PROBE V(out)\n.END`,
   };
 }
@@ -174,13 +175,12 @@ function voltageDivider({ Vin = 12, Vout = 5, R2 = 1000 }) {
 function ledLimiter({ Vsupply = 5, I = 0.02, Vf = 1.8 }) {
   const R = (Vsupply - Vf) / I;
   const IActual = (Vsupply - Vf) / R;
-  const errPct = Math.abs((IActual - I) / I * 100).toFixed(1);
 
   return {
     id: 'led_limiter',
     name: 'LED Current Limiter',
     schematic: '/schematics/led_limiter.svg',
-    simulationBadge: `✓ Simulation Passed — Current: ${formatCurrent(IActual)}`,
+    simulationBadge: analyticalBadge(`I = ${formatCurrent(IActual)}`),
     components: [
       { ref: 'R1', rawValue: R,  unit: 'Ω', display: formatResistance(R), description: 'Current Limiting Resistor', editable: true },
       { ref: 'D1', rawValue: Vf, unit: 'V', display: `Vf = ${formatVoltage(Vf)}`, description: 'LED (Vf)', editable: true },
@@ -188,7 +188,7 @@ function ledLimiter({ Vsupply = 5, I = 0.02, Vf = 1.8 }) {
     derivedParams: { Vsupply, I: IActual },
     graph: {
       type: 'bar',
-      title: 'Current Verification — Target vs Simulated',
+      title: 'Current — Target vs Computed (analytical)',
       data: [
         { label: `Target (${formatCurrent(I)})`,   value: +(I * 1e3).toFixed(2),       color: '#58a6ff', unit: 'mA' },
         { label: `Actual (${formatCurrent(IActual)})`, value: +(IActual * 1e3).toFixed(2), color: '#3fb950', unit: 'mA' },
@@ -202,11 +202,7 @@ function ledLimiter({ Vsupply = 5, I = 0.02, Vf = 1.8 }) {
       '[✓] Formula applied: R = (Vsupply − Vf) / I',
       `[✓] LED forward voltage: Vf = ${formatVoltage(Vf)}`,
       `[✓] R1 calculated: ${formatResistance(R)}`,
-      '[✓] SPICE netlist generated',
-      '[✓] Ngspice simulation running...',
-      `[✓] Simulation complete — current = ${formatCurrent(IActual)}`,
-      `[✓] Verification passed — error: ${errPct}%`,
-      '[✓] Schematic rendered via Schemdraw',
+      ...analyticalSteps(`current = ${formatCurrent(IActual)}`),
     ],
     explanation: `An LED Current Limiter was designed using R = (Vsupply − Vf) / I. With a ${formatVoltage(Vsupply)} supply, Vf = ${formatVoltage(Vf)}, target current ${formatCurrent(I)}, the resistor was calculated as ${formatResistance(R)}. Actual current: ${formatCurrent(IActual)}.`,
     netlist: `LED Current Limiter — SPICE Netlist\n*AutoCDA Generated Netlist\nVin in 0 DC ${Vsupply}\nR1 in mid ${formatResistance(R)}\nD1 mid 0 DLED\n.model DLED D(Is=1e-12 N=1.5 Vj=${Vf})\n.DC Vin ${Vsupply} ${Vsupply} 1\n.PROBE I(D1)\n.END`,
@@ -218,13 +214,12 @@ function commonEmitter({ Av = 20, RC = 10000, VCC = 12 }) {
   const AvActual = RC / RE;
   const R2 = 20000;
   const R1 = R2 * (VCC / (VCC / (1 + Av)) - 1); // simplified bias
-  const errPct = Math.abs((AvActual - Av) / Av * 100).toFixed(1);
 
   return {
     id: 'common_emitter',
     name: 'Common Emitter Amplifier',
     schematic: '/schematics/common_emitter.svg',
-    simulationBadge: `✓ Simulation Passed — Gain: ${+AvActual.toPrecision(3)}`,
+    simulationBadge: analyticalBadge(`Gain = ${+AvActual.toPrecision(3)}`),
     components: [
       { ref: 'R1', rawValue: 100000, unit: 'Ω', display: formatResistance(100000), description: 'Base Bias (Upper)', editable: true },
       { ref: 'R2', rawValue: R2,     unit: 'Ω', display: formatResistance(R2),     description: 'Base Bias (Lower)', editable: true },
@@ -251,14 +246,10 @@ function commonEmitter({ Av = 20, RC = 10000, VCC = 12 }) {
       `[✓] RC selected: ${formatResistance(RC)}`,
       `[✓] RE calculated: ${formatResistance(RE)}`,
       '[✓] Bias resistors calculated',
-      '[✓] DC operating point verified',
-      '[✓] SPICE netlist generated',
-      '[✓] Ngspice simulation running...',
-      `[✓] Simulation complete — gain = ${+AvActual.toPrecision(3)}`,
-      `[✓] Verification passed — error: ${errPct}%`,
-      '[✓] Schematic rendered via Schemdraw',
+      '[✓] DC operating point computed',
+      ...analyticalSteps(`gain = ${+AvActual.toPrecision(3)}`),
     ],
-    explanation: `A Common Emitter Amplifier was designed with target gain ${Av}. Using Av = RC/RE, RC = ${formatResistance(RC)} and RE = ${formatResistance(RE)}. Actual gain: ${+AvActual.toPrecision(3)} (error ${errPct}%). Note 180° phase inversion characteristic of common emitter topology.`,
+    explanation: `A Common Emitter Amplifier was designed with target gain ${Av}. Using Av = RC/RE, RC = ${formatResistance(RC)} and RE = ${formatResistance(RE)}. Computed gain: ${+AvActual.toPrecision(3)} (analytical, not yet SPICE-verified). Note 180° phase inversion characteristic of common emitter topology.`,
     netlist: `Common Emitter Amplifier — SPICE Netlist\n*AutoCDA Generated Netlist\nVin in 0 AC 0.1 SIN(0 0.1 1k)\nVCC vcc 0 DC ${VCC}\nR1 vcc base 100k\nR2 base 0 ${formatResistance(R2)}\nRC vcc col ${formatResistance(RC)}\nRE emit 0 ${formatResistance(RE)}\nC1 in base 10u\nQ1 col base emit BC547\n.model BC547 NPN(Is=1e-14 Bf=200)\n.TRAN 0.01m 5m\n.PROBE V(col)\n.END`,
   };
 }
@@ -272,8 +263,8 @@ function bandPass({ fL = 200, fH = 2000, R = 1000 }) {
   const BW = fH - fL;
   return {
     id: 'band_pass', name: 'RC Band-Pass Filter',
-    schematic: '/schematics/rc_lowpass.svg',
-    simulationBadge: `✓ BW = ${formatFrequency(BW)} | fc = ${formatFrequency(fc)}`,
+    schematic: '/schematics/band_pass.svg',
+    simulationBadge: analyticalBadge(`BW = ${formatFrequency(BW)}, fc = ${formatFrequency(fc)}`),
     components: [
       { ref: 'C1', rawValue: C1, unit: 'F', display: formatCapacitance(C1), description: 'HP Series Cap', editable: true },
       { ref: 'R1', rawValue: R,  unit: 'Ω', display: formatResistance(R),   description: 'Series Resistor', editable: true },
@@ -289,7 +280,7 @@ function bandPass({ fL = 200, fH = 2000, R = 1000 }) {
       `[✓] Bandwidth BW = ${formatFrequency(BW)}`,
       `[✓] HP stage: C1 = ${formatCapacitance(C1)}, R1 = ${formatResistance(R)}`,
       `[✓] LP stage: C2 = ${formatCapacitance(C2)}, R2 = ${formatResistance(R)}`,
-      '[✓] SPICE netlist generated', '[✓] Simulation complete', '[✓] Verified',
+      ...analyticalSteps(`fc = ${formatFrequency(fc)}, BW = ${formatFrequency(BW)}`),
     ],
     explanation: `RC Band-Pass Filter cascades HP and LP stages. HP cutoff = ${formatFrequency(fH)} (C1=${formatCapacitance(C1)}, R1=${formatResistance(R)}). LP cutoff = ${formatFrequency(fL)} (C2=${formatCapacitance(C2)}, R2=${formatResistance(R)}). Centre frequency fc = ${formatFrequency(fc)}, bandwidth = ${formatFrequency(BW)}.`,
     netlist: `Band-Pass Filter — SPICE Netlist\n*AutoCDA Generated\nVin in 0 AC 1\nC1 in mid1 ${formatCapacitance(C1)}\nR1 mid1 mid2 ${formatResistance(R)}\nC2 mid2 0 ${formatCapacitance(C2)}\nR2 mid2 0 ${formatResistance(R)}\n.AC DEC 100 1 1Meg\n.PROBE V(mid2)\n.END`,
@@ -300,8 +291,8 @@ function opampInverting({ Av = 10, R1 = 10000 }) {
   const Rf = R1 * Av;
   return {
     id: 'opamp_inverting', name: 'Op-Amp Inverting Amplifier',
-    schematic: '/schematics/rc_lowpass.svg',
-    simulationBadge: `✓ Gain: −${+Av.toPrecision(3)}`,
+    schematic: '/schematics/opamp_inverting.svg',
+    simulationBadge: analyticalBadge(`Gain = −${+Av.toPrecision(3)}`),
     components: [
       { ref: 'R1', rawValue: R1, unit: 'Ω', display: formatResistance(R1), description: 'Input Resistor',    editable: true },
       { ref: 'Rf', rawValue: Rf, unit: 'Ω', display: formatResistance(Rf), description: 'Feedback Resistor', editable: true },
@@ -320,8 +311,8 @@ function opampInverting({ Av = 10, R1 = 10000 }) {
       '[✓] Formula: Av = −Rf / R1',
       `[✓] R1 selected: ${formatResistance(R1)}`,
       `[✓] Rf calculated: ${formatResistance(Rf)}`,
-      '[✓] Virtual ground at inverting input verified',
-      '[✓] Simulation complete', '[✓] Verified',
+      '[✓] Virtual ground at inverting input assumed',
+      ...analyticalSteps(`gain = −${+Av.toPrecision(3)}`),
     ],
     explanation: `Op-Amp Inverting Amplifier designed using Av = −Rf/R1. With R1 = ${formatResistance(R1)}, Rf = ${formatResistance(Rf)} gives gain = −${+Av.toPrecision(3)}. Output is 180° phase-inverted. Virtual ground at inverting input maintained by negative feedback.`,
     netlist: `Op-Amp Inverting Amplifier — SPICE Netlist\n*AutoCDA Generated\nVin in 0 AC 0.1\nVcc vcc 0 DC 15\nVee vee 0 DC -15\nR1 in inv ${formatResistance(R1)}\nRf out inv ${formatResistance(Rf)}\nXU1 0 inv vcc vee out LM741\n.lib opamp.lib\n.AC DEC 100 1 1Meg\n.PROBE V(out)\n.END`,
@@ -332,8 +323,8 @@ function opampNoninverting({ Av = 11, R1 = 10000 }) {
   const Rf = R1 * (Av - 1);
   return {
     id: 'opamp_noninverting', name: 'Op-Amp Non-Inverting Amplifier',
-    schematic: '/schematics/rc_lowpass.svg',
-    simulationBadge: `✓ Gain: +${+Av.toPrecision(3)}`,
+    schematic: '/schematics/opamp_noninverting.svg',
+    simulationBadge: analyticalBadge(`Gain = +${+Av.toPrecision(3)}`),
     components: [
       { ref: 'R1', rawValue: R1, unit: 'Ω', display: formatResistance(R1), description: 'Ground Resistor',   editable: true },
       { ref: 'Rf', rawValue: Rf, unit: 'Ω', display: formatResistance(Rf), description: 'Feedback Resistor', editable: true },
@@ -352,7 +343,7 @@ function opampNoninverting({ Av = 11, R1 = 10000 }) {
       '[✓] Formula: Av = 1 + Rf / R1',
       `[✓] R1 selected: ${formatResistance(R1)}`,
       `[✓] Rf calculated: ${formatResistance(Rf)}`,
-      '[✓] Simulation complete', '[✓] Verified',
+      ...analyticalSteps(`gain = +${+Av.toPrecision(3)}`),
     ],
     explanation: `Op-Amp Non-Inverting Amplifier using Av = 1 + Rf/R1. With R1 = ${formatResistance(R1)}, Rf = ${formatResistance(Rf)} gives gain = +${+Av.toPrecision(3)}. No phase inversion. High input impedance (signal fed to + terminal).`,
     netlist: `Op-Amp Non-Inverting Amplifier — SPICE Netlist\n*AutoCDA Generated\nVin in 0 AC 0.1\nVcc vcc 0 DC 15\nVee vee 0 DC -15\nR1 inv 0 ${formatResistance(R1)}\nRf out inv ${formatResistance(Rf)}\nXU1 in inv vcc vee out LM741\n.lib opamp.lib\n.AC DEC 100 1 1Meg\n.PROBE V(out)\n.END`,
@@ -366,8 +357,8 @@ function zenerRegulator({ Vin = 12, Vz = 5, Iload = 0.01 }) {
   const Pd = Vz * Iz_min; // zener power at min load
   return {
     id: 'zener_regulator', name: 'Zener Voltage Regulator',
-    schematic: '/schematics/led_limiter.svg',
-    simulationBadge: `✓ Vout = ${formatVoltage(Vz)} regulated`,
+    schematic: '/schematics/zener_regulator.svg',
+    simulationBadge: analyticalBadge(`Vout = ${formatVoltage(Vz)} regulated`),
     components: [
       { ref: 'R1', rawValue: R,    unit: 'Ω', display: formatResistance(R),    description: 'Series Resistor', editable: true },
       { ref: 'Dz', rawValue: Vz,   unit: 'V', display: `Vz = ${formatVoltage(Vz)}`, description: 'Zener Diode',    editable: true },
@@ -387,7 +378,7 @@ function zenerRegulator({ Vin = 12, Vz = 5, Iload = 0.01 }) {
       '[✓] Formula: R = (Vin − Vz) / (Iload + Iz_min)',
       `[✓] R1 calculated: ${formatResistance(R)}`,
       `[✓] Zener power: Pd = ${+(Pd * 1000).toFixed(1)} mW`,
-      '[✓] Simulation complete', '[✓] Verified',
+      ...analyticalSteps(`Vout = ${formatVoltage(Vz)} regulated`),
     ],
     explanation: `Zener Voltage Regulator maintains ${formatVoltage(Vz)} output from ${formatVoltage(Vin)} input. Series resistor R = ${formatResistance(R)} drops excess voltage. Zener clamps output at Vz. Zener dissipates ${+(Pd * 1000).toFixed(1)} mW at minimum load.`,
     netlist: `Zener Regulator — SPICE Netlist\n*AutoCDA Generated\nVin in 0 DC ${Vin}\nR1 in out ${formatResistance(R)}\nDz 0 out ZENER\n.model ZENER D(BV=${Vz} IBV=0.005)\n.DC Vin ${Vin} ${Vin} 1\n.PROBE V(out)\n.END`,
@@ -400,8 +391,8 @@ function rcOscillator({ f = 1000, R = 10000 }) {
   const fActual = 1 / (2 * Math.PI * R * C);
   return {
     id: 'rc_oscillator', name: 'Wien Bridge Oscillator',
-    schematic: '/schematics/rc_lowpass.svg',
-    simulationBadge: `✓ f = ${formatFrequency(fActual)}`,
+    schematic: '/schematics/rc_oscillator.svg',
+    simulationBadge: analyticalBadge(`f = ${formatFrequency(fActual)}`),
     components: [
       { ref: 'R1', rawValue: R, unit: 'Ω', display: formatResistance(R), description: 'Wien Resistor (×2)', editable: true },
       { ref: 'C1', rawValue: C, unit: 'F', display: formatCapacitance(C), description: 'Wien Capacitor (×2)', editable: true },
@@ -423,8 +414,8 @@ function rcOscillator({ f = 1000, R = 10000 }) {
       `[✓] R selected: ${formatResistance(R)}`,
       `[✓] C calculated: ${formatCapacitance(C)}`,
       '[✓] Gain condition: Rf/R2 = 2 (Av = 3)',
-      '[✓] Oscillation condition verified',
-      '[✓] Simulation complete', '[✓] Verified',
+      '[✓] Oscillation condition checked (Barkhausen)',
+      ...analyticalSteps(`f = ${formatFrequency(fActual)}`),
     ],
     explanation: `Wien Bridge Oscillator generates ${formatFrequency(fActual)} sine wave using f = 1/(2πRC). R = ${formatResistance(R)}, C = ${formatCapacitance(C)}. Op-amp gain = 3 (Rf = 2×R2) satisfies Barkhausen criterion for sustained oscillation. Output is clean sine wave.`,
     netlist: `Wien Bridge Oscillator — SPICE Netlist\n*AutoCDA Generated\nVcc vcc 0 DC 15\nVee vee 0 DC -15\nR1 out p ${formatResistance(R)}\nC1 p inv ${formatCapacitance(C)}\nR2 p 0 ${formatResistance(R)}\nC2 inv 0 ${formatCapacitance(C)}\nRf out inv 20k\nRg inv 0 10k\nXU1 p inv vcc vee out LM741\n.TRAN 0.01m 10m\n.PROBE V(out)\n.END`,

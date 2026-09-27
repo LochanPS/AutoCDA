@@ -6,8 +6,10 @@ import GraphPanel from "./components/GraphPanel";
 import ComponentTable from "./components/ComponentTable";
 import ExplanationPanel from "./components/ExplanationPanel";
 import CircuitJSPanel from "./components/CircuitJSPanel";
+import SpecCard from "./components/SpecCard";
 
 import { parsePrompt } from "./utils/circuitParser";
+import { makeSpec, SUPPORTED_TYPES } from "./spec/circuitSpec";
 import { calculateCircuit, recalculateFromComponents } from "./utils/circuitFormulas";
 
 // Static fallback data (for kicadSchematic / kicadNetlist fields)
@@ -40,6 +42,8 @@ export default function App() {
   const [logSteps, setLogSteps]       = useState([]);
   const [inputText, setInputText]     = useState("");
   const [parseError, setParseError]   = useState("");
+  const [showTypePicker, setShowTypePicker] = useState(false);
+  const [pendingSpec, setPendingSpec] = useState(null);   // CircuitSpec awaiting confirm
 
   const [showSchematic,      setShowSchematic]      = useState(false);
   const [showGraph,          setShowGraph]          = useState(false);
@@ -81,7 +85,7 @@ export default function App() {
     setTimeout(() => {
       setMessages(prev => [
         ...prev,
-        { role: "system", text: `Circuit identified: ${circuitData.name}. Calculating component values and running simulation. Results displayed on the right.` },
+        { role: "system", text: `Circuit identified: ${circuitData.name}. Computing component values from design equations (analytical — not yet SPICE-verified). Results displayed on the right.` },
       ]);
     }, 1500);
 
@@ -100,14 +104,40 @@ export default function App() {
     const text = inputText.trim();
     if (!text || loading) return;
 
-    const { matched, circuitId, params } = parsePrompt(text);
-    if (!matched) {
-      setParseError("Circuit not recognised. Try: \"low pass filter 2kHz\", \"voltage divider 9V to 3.3V\", \"amplifier gain 50\"");
+    const spec = parsePrompt(text);
+    if (spec.confidence === 0 || !spec.type) {
+      // No match: prompt user to pick a type instead of running anything.
+      setParseError("Couldn't identify a circuit. Try: \"low pass filter 2kHz\", or pick a type below.");
+      setShowTypePicker(true);
+      setPendingSpec(null);
       return;
     }
+    // Show the editable confirm card BEFORE running.
+    setParseError("");
+    setShowTypePicker(false);
+    setPendingSpec(spec);
+  }, [inputText, loading]);
+
+  // User picked a type from the fallback picker → open an empty spec card.
+  const handlePickType = useCallback((type) => {
+    setParseError("");
+    setShowTypePicker(false);
+    setPendingSpec(makeSpec({ type, targets: {}, confidence: 1, assumed: [] }));
+  }, []);
+
+  // Confirm card actions
+  const handleRunSpec = useCallback(() => {
+    if (!pendingSpec) return;
+    const text = inputText.trim() || pendingSpec.type;
     setInputText("");
-    runCircuit(circuitId, params, text);
-  }, [inputText, loading, runCircuit]);
+    const spec = pendingSpec;
+    setPendingSpec(null);
+    runCircuit(spec.type, spec.targets, text);
+  }, [pendingSpec, inputText, runCircuit]);
+
+  const handleCancelSpec = useCallback(() => {
+    setPendingSpec(null);
+  }, []);
 
 
   // Component value edit → live recalculate
@@ -187,7 +217,34 @@ export default function App() {
                   {parseError}
                 </div>
               )}
+              {showTypePicker && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "8px" }}>
+                  {SUPPORTED_TYPES.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => handlePickType(t.id)}
+                      style={{
+                        background: "#1a1f27", border: "1px solid #30363d", borderRadius: "6px",
+                        color: "#8b949e", fontFamily: "'JetBrains Mono', monospace", fontSize: "10px",
+                        padding: "5px 8px", cursor: "pointer",
+                      }}
+                    >
+                      {t.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {/* Confirm-before-run spec card */}
+            {pendingSpec && (
+              <SpecCard
+                spec={pendingSpec}
+                onChange={setPendingSpec}
+                onRun={handleRunSpec}
+                onCancel={handleCancelSpec}
+              />
+            )}
 
             {/* Processing log */}
             <ProcessingLog steps={logSteps} />
@@ -238,7 +295,7 @@ function TopBar() {
         <span style={{ color: "#484f58", fontWeight: 400, fontSize: "14px" }}> — Automatic Circuit Design Assistant</span>
       </div>
       <div style={{ display: "flex", gap: "10px" }}>
-        {["NLP: Rule Engine", "Simulator: Ngspice", "Renderer: Schemdraw"].map(label => (
+        {["NLP: Rule Engine", "Engine: Analytical", "Renderer: Schemdraw"].map(label => (
           <div key={label} style={{ display: "flex", alignItems: "center", gap: "6px", background: "#1a3a1a", border: "1px solid #3fb950", borderRadius: "20px", padding: "4px 12px", fontSize: "12px", color: "#3fb950", fontFamily: "'JetBrains Mono', monospace" }}>
             <span className="pulse-dot" />{label}
           </div>
