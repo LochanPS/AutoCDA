@@ -209,11 +209,24 @@ function ledLimiter({ Vsupply = 5, I = 0.02, Vf = 1.8 }) {
   };
 }
 
-function commonEmitter({ Av = 20, RC = 10000, VCC = 12 }) {
-  const RE = RC / Av;
-  const AvActual = RC / RE;
-  const R2 = 20000;
-  const R1 = R2 * (VCC / (VCC / (1 + Av)) - 1); // simplified bias
+function commonEmitter({ Av = 20, VCC = 12 }) {
+  // Bias-aware CE design. The old Av=RC/RE with a fixed RC ignored headroom and
+  // drove the transistor into saturation (Ic·RC > VCC). Size RE and RC for a
+  // mid-rail quiescent VCE (max swing) with un-bypassed-RE gain = RC/(RE+re'):
+  //   VCE = VCC − Ic·(RC+RE) = VCC/2,  RC = Av·(RE+re')
+  //   ⇒ RE = (VCC/(2·Ic) − Av·re') / (Av+1)
+  const Ic = 1e-3;              // 1 mA quiescent collector current
+  const beta = 200;
+  const re = 0.026 / Ic;       // intrinsic emitter resistance (~26 Ω)
+  let RE = (VCC / (2 * Ic) - Av * re) / (Av + 1);
+  if (RE < 10) RE = 10;        // floor for very high gains
+  const RC = Av * (RE + re);
+  const AvActual = RC / (RE + re);
+  // Stiff bias divider: divider current ~10× base current for a stable Q-point.
+  const Vb = Ic * RE + 0.7;
+  const Idiv = 10 * (Ic / beta);
+  const R2 = Vb / Idiv;
+  const R1 = (VCC - Vb) / Idiv;
 
   return {
     id: 'common_emitter',
@@ -221,7 +234,7 @@ function commonEmitter({ Av = 20, RC = 10000, VCC = 12 }) {
     schematic: '/schematics/common_emitter.svg',
     simulationBadge: analyticalBadge(`Gain = ${+AvActual.toPrecision(3)}`),
     components: [
-      { ref: 'R1', rawValue: 100000, unit: 'Ω', display: formatResistance(100000), description: 'Base Bias (Upper)', editable: true },
+      { ref: 'R1', rawValue: R1,     unit: 'Ω', display: formatResistance(R1),     description: 'Base Bias (Upper)', editable: true },
       { ref: 'R2', rawValue: R2,     unit: 'Ω', display: formatResistance(R2),     description: 'Base Bias (Lower)', editable: true },
       { ref: 'RC', rawValue: RC,     unit: 'Ω', display: formatResistance(RC),     description: 'Collector Resistor', editable: true },
       { ref: 'RE', rawValue: RE,     unit: 'Ω', display: formatResistance(RE),     description: 'Emitter Resistor',   editable: true },
@@ -250,7 +263,7 @@ function commonEmitter({ Av = 20, RC = 10000, VCC = 12 }) {
       ...analyticalSteps(`gain = ${+AvActual.toPrecision(3)}`),
     ],
     explanation: `A Common Emitter Amplifier was designed with target gain ${Av}. Using Av = RC/RE, RC = ${formatResistance(RC)} and RE = ${formatResistance(RE)}. Computed gain: ${+AvActual.toPrecision(3)} (analytical, not yet SPICE-verified). Note 180° phase inversion characteristic of common emitter topology.`,
-    netlist: `Common Emitter Amplifier — SPICE Netlist\n*AutoCDA Generated Netlist\nVin in 0 AC 0.1 SIN(0 0.1 1k)\nVCC vcc 0 DC ${VCC}\nR1 vcc base 100k\nR2 base 0 ${formatResistance(R2)}\nRC vcc col ${formatResistance(RC)}\nRE emit 0 ${formatResistance(RE)}\nC1 in base 10u\nQ1 col base emit BC547\n.model BC547 NPN(Is=1e-14 Bf=200)\n.TRAN 0.01m 5m\n.PROBE V(col)\n.END`,
+    netlist: `Common Emitter Amplifier — SPICE Netlist\n*AutoCDA Generated Netlist\nVin in 0 AC 0.1 SIN(0 0.1 1k)\nVCC vcc 0 DC ${VCC}\nR1 vcc base ${formatResistance(R1)}\nR2 base 0 ${formatResistance(R2)}\nRC vcc col ${formatResistance(RC)}\nRE emit 0 ${formatResistance(RE)}\nC1 in base 10u\nQ1 col base emit BC547\n.model BC547 NPN(Is=1e-14 Bf=200)\n.TRAN 0.01m 5m\n.PROBE V(col)\n.END`,
   };
 }
 
