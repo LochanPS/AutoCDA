@@ -41,6 +41,17 @@ export const E96 = [
 
 const TABLES = { E12, E24, E96 };
 
+/**
+ * Return a copy of a component with a new rawValue AND a regenerated display
+ * string, so the shown value never drifts from the actual (snapped) value.
+ */
+export function applyValue(component, value) {
+  let display = component.display;
+  if (component.unit === "Ω") display = formatResistance(value);
+  else if (component.unit === "F") display = formatCapacitance(value);
+  return { ...component, rawValue: value, display };
+}
+
 function tableFor(series) {
   const t = TABLES[String(series).toUpperCase()];
   if (!t) throw new Error(`eseries: unknown series "${series}" (use E12/E24/E96)`);

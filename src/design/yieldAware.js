@@ -22,7 +22,7 @@
  * math is pure and unit-tested.
  */
 
-import { snap, neighbors } from "./eseries";
+import { snap, neighbors, applyValue } from "./eseries";
 import { simulateMeasure, circuitTargetInfo, isVerifiable, dominantRef } from "../agents/simulatorAgent";
 import { runToleranceSweep } from "./montecarlo";
 
@@ -233,6 +233,6 @@ function sameMap(a, b) {
 
 function componentsFrom(idealComponents, values) {
   return idealComponents.map((c) =>
-    values[c.ref] != null && isPassive(c) ? { ...c, rawValue: values[c.ref] } : { ...c }
+    values[c.ref] != null && isPassive(c) ? applyValue(c, values[c.ref]) : { ...c }
   );
 }

@@ -18,7 +18,7 @@
  */
 
 import { calculateCircuit } from "../utils/circuitFormulas";
-import { snap } from "../design/eseries";
+import { snap, applyValue } from "../design/eseries";
 
 const isPassive = (c) => c.unit === "Ω" || c.unit === "F";
 
@@ -31,7 +31,7 @@ export function designerAgent({ type, targets, eSeries = "E24" }) {
   if (!ideal) return { ok: false, error: "unknown circuit type" };
 
   const snapped = ideal.components.map((c) =>
-    isPassive(c) ? { ...c, rawValue: snap(c.rawValue, eSeries) } : { ...c }
+    isPassive(c) ? applyValue(c, snap(c.rawValue, eSeries)) : { ...c }
   );
 
   return { ok: true, name: ideal.name, idealComponents: ideal.components, snapped };

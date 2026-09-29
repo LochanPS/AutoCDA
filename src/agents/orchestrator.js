@@ -17,6 +17,7 @@
  */
 
 import { calculateCircuit, recalculateFromComponents } from "../utils/circuitFormulas";
+import { applyValue } from "../design/eseries";
 import { designerAgent } from "./designerAgent";
 import { refineAgent } from "./refineAgent";
 import { isVerifiable, circuitTargetInfo } from "./simulatorAgent";
@@ -81,7 +82,7 @@ export async function orchestrate(spec, { runSpice, onStatus } = {}) {
   }
 
   const finalComponents = snapped.map((c) =>
-    c.ref === refine.dominant ? { ...c, rawValue: refine.best.candidate } : c
+    c.ref === refine.dominant ? applyValue(c, refine.best.candidate) : c
   );
   const converged = refine.best.errorPct <= tol;
   status(converged ? "Verified in SPICE" : "Best-effort design");
