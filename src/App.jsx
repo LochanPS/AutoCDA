@@ -16,8 +16,12 @@ import { parseWithLLM } from "./parse/llmParser";
 import { buildBOM } from "./design/bom";
 import { runToleranceSweep } from "./design/montecarlo";
 
-// Dev-only: register window.__yieldBench() for the yield-aware evaluation.
-if (process.env.NODE_ENV === "development") { import("./eval/yieldBenchmark"); }
+// Dev-only: register evaluation hooks (window.__yieldBench / __parserBench / __designBench).
+if (process.env.NODE_ENV === "development") {
+  import("./eval/yieldBenchmark");
+  import("./eval/parserBenchmark");
+  import("./eval/designBenchmark");
+}
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
 // Static fallback data (for kicadSchematic / kicadNetlist fields)
