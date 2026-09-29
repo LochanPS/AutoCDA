@@ -37,14 +37,12 @@ export default function CircuitJSPanel({ circuit, visible }) {
   }
 
   return (
-    <div style={{ ...panelStyle, opacity: visible ? 1 : 0, transition: "opacity 0.4s ease" }}>
+    <div style={{ ...panelStyle, opacity: visible ? 1 : 0, transition: "opacity 0.3s ease" }}>
       <PanelHeader />
       <iframe
         ref={iframeRef}
         src={`https://www.falstad.com/circuit/circuitjs.html?${embed}`}
-        style={{
-          width: "100%", height: "400px", border: "none", borderRadius: "8px"
-        }}
+        style={{ width: "100%", flex: 1, minHeight: "360px", border: "none" }}
         title="CircuitJS Simulator"
       />
     </div>
@@ -54,29 +52,37 @@ export default function CircuitJSPanel({ circuit, visible }) {
 function PanelHeader() {
   return (
     <div style={{
-      padding: "10px 16px 8px",
-      fontSize: "10px",
-      letterSpacing: "0.08em",
-      color: "#8b949e",
-      fontFamily: "'JetBrains Mono', monospace",
+      padding: "13px 18px",
+      fontSize: "var(--fs-sm)",
+      color: "var(--text-2)",
       fontWeight: 600,
-      borderBottom: "1px solid #30363d",
+      borderBottom: "1px solid var(--border)",
+      flexShrink: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
     }}>
-      LIVE SIMULATOR (CircuitJS)
+      <span>Live simulator</span>
+      <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)", fontWeight: 500 }}>Powered by CircuitJS</span>
     </div>
   );
 }
 
 const panelStyle = {
-  background: "#161b22",
-  border: "1px solid #30363d",
-  borderRadius: "8px",
+  width: "100%",
+  height: "100%",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--r)",
+  boxShadow: "var(--shadow-sm)",
   overflow: "hidden",
+  display: "flex",
+  flexDirection: "column",
 };
 
 const emptyStyle = {
-  color: "#484f58",
-  fontFamily: "'JetBrains Mono', monospace",
-  fontSize: "13px",
+  color: "var(--text-3)",
+  fontSize: "var(--fs-sm)",
   padding: "16px",
+  margin: "auto",
 };

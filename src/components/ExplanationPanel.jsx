@@ -2,6 +2,7 @@ import React from "react";
 import { generateKicadSch } from "../utils/kicadExport";
 import { getCircuitJSUrl } from "../utils/circuitjs";
 import { downloadEasyEDAJson } from "../utils/easyedaschema";
+import { buildBOM, buildBomCsv } from "../design/bom";
 
 export default function ExplanationPanel({ circuit, visible, expanded, onToggle }) {
   const downloadFile = (content, filename, mime) => {
@@ -31,6 +32,11 @@ export default function ExplanationPanel({ circuit, visible, expanded, onToggle 
     downloadEasyEDAJson(circuit);
   };
 
+  const handleExportBom = () => {
+    if (!circuit) return;
+    downloadFile(buildBomCsv(buildBOM(circuit.components)), `${circuit.id}_bom.csv`, "text/csv");
+  };
+
   const isCollapsible = true; // Always collapsible in sidebar
   const shouldExpand = isCollapsible ? (expanded !== false) : true;
 
@@ -46,55 +52,58 @@ export default function ExplanationPanel({ circuit, visible, expanded, onToggle 
     <div style={{ ...panelStyle, opacity: visible ? 1 : 0, transition: "opacity 0.4s ease" }}>
       <PanelHeader expanded={shouldExpand} onToggle={onToggle} />
       {shouldExpand && (
-        <div style={{ padding: "10px 12px", maxHeight: "200px", overflowY: "auto" }}>
-          <p style={{
-            color: "#8b949e",
-            fontFamily: "'Segoe UI', system-ui, sans-serif",
-            fontSize: "11px",
-            lineHeight: "1.5",
-            margin: "0 0 10px 0",
-          }}>
+        <div style={{ padding: "16px 18px" }}>
+          <p style={{ color: "var(--text-2)", fontSize: "var(--fs-sm)", lineHeight: 1.6, maxWidth: "68ch", margin: "0 0 16px 0" }}>
             {circuit.explanation}
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-            <button
-              onClick={handleExportSpice}
-              style={btnStyleSmall("#58a6ff")}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#1f3a5f"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-            >
-              ↓ SPICE
-            </button>
-            <button
-              onClick={handleExportKicad}
-              style={btnStyleSmall("#d29922")}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#2d2000"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-            >
-              ↓ KiCad
-            </button>
+          <div style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, marginBottom: "8px" }}>
+            Export
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            <ExportButton onClick={handleExportBom} label="BOM (CSV)" />
+            <ExportButton onClick={handleExportSpice} label="SPICE netlist" />
+            <ExportButton onClick={handleExportKicad} label="KiCad" />
+            <ExportButton onClick={handleExportEasyEDA} label="Altium (JSON)" />
             {getCircuitJSUrl(circuit) && (
-              <button
-                onClick={() => window.open(getCircuitJSUrl(circuit), "_blank")}
-                style={btnStyleSmall("#3fb950")}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#0d2b0d"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-              >
-                ▶ CircuitJS
-              </button>
+              <ExportButton onClick={() => window.open(getCircuitJSUrl(circuit), "_blank")} label="Open in CircuitJS" external />
             )}
-            <button
-              onClick={handleExportEasyEDA}
-              style={btnStyleSmall("#a371f7")}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#2d1d4a"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-            >
-              ↓ Altium (JSON)
-            </button>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 2.5v7.5" /><path d="M4.5 7L8 10.3 11.5 7" /><path d="M3 13h10" />
+    </svg>
+  );
+}
+function ExternalIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 3H3.5v9.5H13V10" /><path d="M9 3h4v4" /><path d="M13 3L7.5 8.5" />
+    </svg>
+  );
+}
+
+function ExportButton({ onClick, label, external }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: "7px",
+        background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)",
+        color: "var(--text)", fontSize: "var(--fs-sm)", fontWeight: 500, padding: "7px 12px", cursor: "pointer",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text)"; }}
+    >
+      <span style={{ display: "inline-flex", color: "var(--text-3)" }}>{external ? <ExternalIcon /> : <DownloadIcon />}</span>
+      {label}
+    </button>
   );
 }
 
@@ -103,13 +112,11 @@ function PanelHeader({ expanded, onToggle }) {
     <div
       onClick={onToggle}
       style={{
-        padding: "10px 12px 8px",
-        fontSize: "10px",
-        letterSpacing: "0.08em",
-        color: "#8b949e",
-        fontFamily: "'JetBrains Mono', monospace",
+        padding: "13px 18px",
+        fontSize: "var(--fs-body)",
+        color: "var(--text)",
         fontWeight: 600,
-        borderBottom: "1px solid #30363d",
+        borderBottom: expanded ? "1px solid var(--border)" : "none",
         cursor: "pointer",
         display: "flex",
         justifyContent: "space-between",
@@ -117,51 +124,20 @@ function PanelHeader({ expanded, onToggle }) {
         userSelect: "none",
       }}
     >
-      <span>DESIGN EXPLANATION</span>
-      <span style={{ color: "#58a6ff", fontSize: "12px" }}>{expanded ? "▼" : "▶"}</span>
+      <span>Explanation and exports</span>
+      <span style={{ color: "var(--text-3)", display: "inline-flex" }}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 160ms var(--ease)" }}>
+          <path d="M6 3.5L10.5 8L6 12.5" />
+        </svg>
+      </span>
     </div>
   );
 }
 
-function btnStyle(color, hoverBg) {
-  return {
-    background: "transparent",
-    border: `1px solid ${color}`,
-    borderRadius: "6px",
-    color: color,
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: "12px",
-    padding: "6px 16px",
-    cursor: "pointer",
-    transition: "background 0.2s",
-  };
-}
-
-function btnStyleSmall(color) {
-  return {
-    background: "transparent",
-    border: `1px solid ${color}`,
-    borderRadius: "4px",
-    color: color,
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: "10px",
-    padding: "4px 8px",
-    cursor: "pointer",
-    transition: "background 0.2s",
-    textAlign: "center",
-  };
-}
-
 const panelStyle = {
-  background: "#161b22",
-  border: "1px solid #30363d",
-  borderRadius: "8px",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--r)",
+  boxShadow: "var(--shadow-sm)",
   overflow: "hidden",
-};
-
-const emptyStyle = {
-  color: "#484f58",
-  fontFamily: "'JetBrains Mono', monospace",
-  fontSize: "13px",
-  padding: "16px",
 };

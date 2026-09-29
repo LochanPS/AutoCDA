@@ -41,13 +41,13 @@ function generateWaveformData(input, output, frequency, phaseInvert) {
   return points;
 }
 
-const GRID = "#30363d";
-const AXIS_TEXT = "#8b949e";
+const GRID = "#dce1e7";
+const AXIS_TEXT = "#5b6774";
 const TOOLTIP_STYLE = {
-  background: "#161b22",
-  border: "1px solid #30363d",
+  background: "#ffffff",
+  border: "1px solid #dce1e7",
   borderRadius: "6px",
-  color: "#e6edf3",
+  color: "#1c2530",
   fontSize: "12px",
   fontFamily: "'JetBrains Mono', monospace",
 };
@@ -64,8 +64,8 @@ export default function GraphPanel({ circuit, visible }) {
   if (!circuit) {
     return (
       <div style={panelStyle}>
-        <PanelHeader title="SIMULATION OUTPUT" />
-        <div style={emptyStyle}>Select a circuit to view simulation</div>
+        <PanelHeader title="Response" />
+        <div style={emptyStyle}>Run a design to see its response.</div>
       </div>
     );
   }
@@ -73,10 +73,10 @@ export default function GraphPanel({ circuit, visible }) {
   const g = circuit.graph;
 
   return (
-    <div style={{ ...panelStyle, opacity: visible ? 1 : 0, transition: "opacity 0.4s ease" }}>
-      <PanelHeader title="SIMULATION OUTPUT" />
-      <div style={{ flex: 1, padding: "12px 8px 8px", minHeight: 0, display: "flex", flexDirection: "column" }}>
-        <div style={{ fontSize: "11px", color: "#8b949e", fontFamily: "'JetBrains Mono', monospace", marginBottom: "8px", paddingLeft: "8px" }}>
+    <div style={{ ...panelStyle, opacity: visible ? 1 : 0, transition: "opacity 0.3s ease" }}>
+      <PanelHeader title="Response" />
+      <div style={{ flex: 1, padding: "14px 10px 10px", minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div style={{ fontSize: "var(--fs-sm)", color: "var(--text-2)", marginBottom: "10px", paddingLeft: "8px", fontWeight: 500 }}>
           {g.title}
         </div>
         <div style={{ flex: 1, minHeight: 0 }}>
@@ -117,14 +117,14 @@ function BodePlot({ data, g }) {
         />
         <ReferenceLine
           x={formatHz(g.cutoffFrequency)}
-          stroke="#d29922"
+          stroke="#9a6700"
           strokeDasharray="6 3"
-          label={{ value: `fc=${formatHz(g.cutoffFrequency)}Hz`, fill: "#d29922", fontSize: 10 }}
+          label={{ value: `fc=${formatHz(g.cutoffFrequency)}Hz`, fill: "#9a6700", fontSize: 10 }}
         />
         <Line
           type="monotone"
           dataKey="gain"
-          stroke="#58a6ff"
+          stroke="#2f6feb"
           strokeWidth={2}
           dot={false}
           isAnimationActive={true}
@@ -152,7 +152,7 @@ function BarPlot({ data, g }) {
           <LabelList
             dataKey="value"
             position="top"
-            style={{ fill: "#e6edf3", fontSize: "11px", fontFamily: "'JetBrains Mono', monospace" }}
+            style={{ fill: "#1c2530", fontSize: "11px", fontFamily: "'JetBrains Mono', monospace" }}
             formatter={(v) => data[0]?.unit ? `${v} ${data[0].unit}` : v}
           />
         </Bar>
@@ -198,13 +198,11 @@ function WaveformPlot({ data, g }) {
 function PanelHeader({ title }) {
   return (
     <div style={{
-      padding: "12px 16px 8px",
-      fontSize: "10px",
-      letterSpacing: "0.08em",
-      color: "#8b949e",
-      fontFamily: "'JetBrains Mono', monospace",
+      padding: "13px 18px",
+      fontSize: "var(--fs-sm)",
+      color: "var(--text-2)",
       fontWeight: 600,
-      borderBottom: "1px solid #30363d",
+      borderBottom: "1px solid var(--border)",
       flexShrink: 0,
     }}>
       {title}
@@ -213,9 +211,11 @@ function PanelHeader({ title }) {
 }
 
 const panelStyle = {
-  background: "#161b22",
-  border: "1px solid #30363d",
-  borderRadius: "8px",
+  width: "100%",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--r)",
+  boxShadow: "var(--shadow-sm)",
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
@@ -223,9 +223,9 @@ const panelStyle = {
 };
 
 const emptyStyle = {
-  color: "#484f58",
-  fontFamily: "'JetBrains Mono', monospace",
-  fontSize: "13px",
+  color: "var(--text-3)",
+  fontSize: "var(--fs-sm)",
   padding: "20px",
   textAlign: "center",
+  margin: "auto",
 };

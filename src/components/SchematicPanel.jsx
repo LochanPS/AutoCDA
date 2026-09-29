@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 /* Inline SVG fallbacks — accurate electronic symbols */
 const FALLBACK_SVGS = {
   rc_lowpass: `<svg viewBox="0 0 400 210" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
-  <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
+  <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- Voltage source -->
   <circle cx="40" cy="120" r="20" class="sym"/>
   <text x="40" y="115" text-anchor="middle" class="lbl" font-size="10">+</text>
@@ -28,8 +28,8 @@ const FALLBACK_SVGS = {
   <line x1="276" y1="148" x2="296" y2="148" class="wire"/>
   <line x1="281" y1="156" x2="291" y2="156" class="wire"/>
   <!-- Vout label -->
-  <circle cx="340" cy="60" r="4" fill="#3fb950"/>
-  <text x="355" y="55" class="lbl" fill="#3fb950">Vout</text>
+  <circle cx="340" cy="60" r="4" fill="#1a7f42"/>
+  <text x="355" y="55" class="lbl" fill="#1a7f42">Vout</text>
   <!-- Bottom wire -->
   <line x1="40" y1="140" x2="40" y2="170" class="wire"/>
   <line x1="40" y1="170" x2="286" y2="170" class="wire"/>
@@ -37,7 +37,7 @@ const FALLBACK_SVGS = {
 </svg>`,
 
   rc_highpass: `<svg viewBox="0 0 400 200" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
-  <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
+  <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- Voltage source -->
   <circle cx="40" cy="120" r="20" class="sym"/>
   <text x="40" y="115" text-anchor="middle" class="lbl" font-size="10">+</text>
@@ -62,8 +62,8 @@ const FALLBACK_SVGS = {
   <line x1="220" y1="100" x2="220" y2="140" class="wire"/>
   <!-- Vout -->
   <line x1="280" y1="60" x2="350" y2="60" class="wire"/>
-  <circle cx="330" cy="60" r="4" fill="#3fb950"/>
-  <text x="345" y="55" class="lbl" fill="#3fb950">Vout</text>
+  <circle cx="330" cy="60" r="4" fill="#1a7f42"/>
+  <text x="345" y="55" class="lbl" fill="#1a7f42">Vout</text>
   <!-- Bottom wire -->
   <line x1="40" y1="140" x2="40" y2="170" class="wire"/>
   <line x1="40" y1="170" x2="220" y2="170" class="wire"/>
@@ -71,7 +71,7 @@ const FALLBACK_SVGS = {
 </svg>`,
 
   voltage_divider: `<svg viewBox="0 0 300 270" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
-  <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
+  <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- Voltage source -->
   <circle cx="50" cy="130" r="22" class="sym"/>
   <text x="50" y="124" text-anchor="middle" class="lbl" font-size="10">12V</text>
@@ -93,15 +93,15 @@ const FALLBACK_SVGS = {
   <line x1="270" y1="218" x2="290" y2="218" class="wire"/>
   <line x1="275" y1="226" x2="285" y2="226" class="wire"/>
   <!-- Vout at middle node -->
-  <circle cx="220" cy="130" r="5" fill="#3fb950"/>
-  <text x="220" y="155" text-anchor="middle" class="lbl" fill="#3fb950">Vout=5V</text>
+  <circle cx="220" cy="130" r="5" fill="#1a7f42"/>
+  <text x="220" y="155" text-anchor="middle" class="lbl" fill="#1a7f42">Vout=5V</text>
   <!-- Bottom wire -->
   <line x1="50" y1="152" x2="50" y2="210" class="wire"/>
   <line x1="50" y1="210" x2="280" y2="210" class="wire"/>
 </svg>`,
 
   led_limiter: `<svg viewBox="0 0 400 200" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
-  <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
+  <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- Voltage source -->
   <circle cx="40" cy="110" r="20" class="sym"/>
   <text x="40" y="105" text-anchor="middle" class="lbl" font-size="10">5V</text>
@@ -115,14 +115,14 @@ const FALLBACK_SVGS = {
   <!-- Wire to LED -->
   <line x1="180" y1="60" x2="230" y2="60" class="wire"/>
   <!-- LED symbol: triangle + bar diode -->
-  <polygon points="230,44 230,76 262,60" fill="#3fb950" fill-opacity="0.3" stroke="#3fb950" stroke-width="2"/>
-  <line x1="262" y1="44" x2="262" y2="76" stroke="#3fb950" stroke-width="2.5"/>
+  <polygon points="230,44 230,76 262,60" fill="#1a7f42" fill-opacity="0.3" stroke="#1a7f42" stroke-width="2"/>
+  <line x1="262" y1="44" x2="262" y2="76" stroke="#1a7f42" stroke-width="2.5"/>
   <text x="246" y="100" text-anchor="middle" class="lbl">D1 Vf=1.8V</text>
   <!-- LED emission arrows -->
-  <line x1="270" y1="45" x2="285" y2="30" stroke="#d29922" stroke-width="1.5"/>
-  <polygon points="285,30 278,33 282,37" fill="#d29922"/>
-  <line x1="278" y1="52" x2="293" y2="37" stroke="#d29922" stroke-width="1.5"/>
-  <polygon points="293,37 286,40 290,44" fill="#d29922"/>
+  <line x1="270" y1="45" x2="285" y2="30" stroke="#9a6700" stroke-width="1.5"/>
+  <polygon points="285,30 278,33 282,37" fill="#9a6700"/>
+  <line x1="278" y1="52" x2="293" y2="37" stroke="#9a6700" stroke-width="1.5"/>
+  <polygon points="293,37 286,40 290,44" fill="#9a6700"/>
   <!-- Wire after LED to ground -->
   <line x1="262" y1="60" x2="340" y2="60" class="wire"/>
   <line x1="340" y1="60" x2="340" y2="150" class="wire"/>
@@ -136,10 +136,10 @@ const FALLBACK_SVGS = {
 </svg>`,
 
   common_emitter: `<svg viewBox="0 0 420 290" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
-  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- VCC rail -->
   <line x1="260" y1="10" x2="260" y2="30" class="wire"/>
-  <text x="260" y="8" text-anchor="middle" class="lbl" fill="#d29922">VCC 12V</text>
+  <text x="260" y="8" text-anchor="middle" class="lbl" fill="#9a6700">VCC 12V</text>
   <!-- RC collector resistor -->
   <polyline points="260,30 267,30 270,18 276,42 282,18 288,42 294,18 300,30 307,30" class="sym"/>
   <text x="283" y="12" text-anchor="middle" class="lbl">RC 10kΩ</text>
@@ -149,13 +149,13 @@ const FALLBACK_SVGS = {
   <!-- Base line -->
   <line x1="200" y1="120" x2="240" y2="120" class="wire"/>
   <!-- Vertical bar -->
-  <line x1="240" y1="100" x2="240" y2="140" stroke="#79c0ff" stroke-width="3"/>
+  <line x1="240" y1="100" x2="240" y2="140" stroke="#2f6feb" stroke-width="3"/>
   <!-- Collector line (angled up) -->
   <line x1="240" y1="107" x2="270" y2="80" class="sym"/>
   <!-- Emitter line (angled down) -->
   <line x1="240" y1="133" x2="270" y2="160" class="sym"/>
   <!-- Emitter arrow -->
-  <polygon points="260,157 268,148 272,162" fill="#79c0ff"/>
+  <polygon points="260,157 268,148 272,162" fill="#2f6feb"/>
   <!-- Labels -->
   <text x="290" y="78" class="lbl">C</text>
   <text x="186" y="124" class="lbl">B</text>
@@ -165,7 +165,7 @@ const FALLBACK_SVGS = {
   <line x1="270" y1="80" x2="260" y2="80" class="wire"/>
   <!-- R1 top bias -->
   <line x1="160" y1="10" x2="160" y2="30" class="wire"/>
-  <text x="160" y="8" text-anchor="middle" class="lbl" fill="#d29922">VCC</text>
+  <text x="160" y="8" text-anchor="middle" class="lbl" fill="#9a6700">VCC</text>
   <polyline points="160,30 168,30 171,18 177,42 183,18 189,42 195,18 201,30 208,30" class="sym"/>
   <text x="180" y="12" text-anchor="middle" class="lbl">R1 100kΩ</text>
   <line x1="160" y1="50" x2="160" y2="120" class="wire"/>
@@ -188,21 +188,21 @@ const FALLBACK_SVGS = {
   <line x1="265" y1="236" x2="275" y2="236" class="wire"/>
   <!-- Input coupling cap C1 -->
   <line x1="80" y1="120" x2="110" y2="120" class="wire"/>
-  <line x1="110" y1="107" x2="110" y2="133" stroke="#79c0ff" stroke-width="3"/>
-  <line x1="123" y1="107" x2="123" y2="133" stroke="#79c0ff" stroke-width="3"/>
+  <line x1="110" y1="107" x2="110" y2="133" stroke="#2f6feb" stroke-width="3"/>
+  <line x1="123" y1="107" x2="123" y2="133" stroke="#2f6feb" stroke-width="3"/>
   <line x1="123" y1="120" x2="160" y2="120" class="wire"/>
   <text x="116" y="100" text-anchor="middle" class="lbl">C1 10µF</text>
   <!-- Vin -->
   <line x1="60" y1="120" x2="80" y2="120" class="wire"/>
-  <text x="45" y="120" text-anchor="middle" class="lbl" fill="#58a6ff">Vin</text>
+  <text x="45" y="120" text-anchor="middle" class="lbl" fill="#2f6feb">Vin</text>
   <!-- Vout at collector -->
   <line x1="270" y1="80" x2="360" y2="80" class="wire"/>
-  <circle cx="345" cy="80" r="4" fill="#3fb950"/>
-  <text x="365" y="84" class="lbl" fill="#3fb950">Vout</text>
+  <circle cx="345" cy="80" r="4" fill="#1a7f42"/>
+  <text x="365" y="84" class="lbl" fill="#1a7f42">Vout</text>
 </svg>`,
 
   band_pass: `<svg viewBox="0 0 440 240" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
-  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- Voltage source -->
   <circle cx="40" cy="120" r="20" class="sym"/>
   <text x="40" y="116" text-anchor="middle" class="lbl" font-size="10">+</text>
@@ -213,10 +213,10 @@ const FALLBACK_SVGS = {
   <line x1="90" y1="45" x2="90" y2="75" class="sym" stroke-width="3"/>
   <line x1="103" y1="45" x2="103" y2="75" class="sym" stroke-width="3"/>
   <text x="96" y="35" text-anchor="middle" class="lbl">C1</text>
-  <text x="96" y="95" text-anchor="middle" class="lbl" fill="#d29922">HP</text>
+  <text x="96" y="95" text-anchor="middle" class="lbl" fill="#9a6700">HP</text>
   <line x1="103" y1="60" x2="150" y2="60" class="wire"/>
   <!-- HP shunt R1 to ground -->
-  <circle cx="150" cy="60" r="3" fill="#79c0ff"/>
+  <circle cx="150" cy="60" r="3" fill="#2f6feb"/>
   <polyline points="150,60 150,68 134,74 166,86 134,98 166,110 150,116 150,124" class="sym"/>
   <text x="122" y="95" text-anchor="middle" class="lbl">R1</text>
   <line x1="150" y1="124" x2="150" y2="150" class="wire"/>
@@ -227,10 +227,10 @@ const FALLBACK_SVGS = {
   <line x1="150" y1="60" x2="180" y2="60" class="wire"/>
   <polyline points="180,60 188,60 192,44 200,76 208,44 216,76 224,44 232,60 240,60" class="sym"/>
   <text x="210" y="35" text-anchor="middle" class="lbl">R2</text>
-  <text x="210" y="95" text-anchor="middle" class="lbl" fill="#d29922">LP</text>
+  <text x="210" y="95" text-anchor="middle" class="lbl" fill="#9a6700">LP</text>
   <line x1="240" y1="60" x2="300" y2="60" class="wire"/>
   <!-- LP shunt C2 to ground -->
-  <circle cx="300" cy="60" r="3" fill="#79c0ff"/>
+  <circle cx="300" cy="60" r="3" fill="#2f6feb"/>
   <line x1="285" y1="75" x2="315" y2="75" class="sym" stroke-width="3"/>
   <line x1="285" y1="88" x2="315" y2="88" class="sym" stroke-width="3"/>
   <text x="322" y="82" class="lbl">C2</text>
@@ -241,8 +241,8 @@ const FALLBACK_SVGS = {
   <line x1="295" y1="166" x2="305" y2="166" class="wire"/>
   <!-- Vout -->
   <line x1="300" y1="60" x2="400" y2="60" class="wire"/>
-  <circle cx="375" cy="60" r="4" fill="#3fb950"/>
-  <text x="382" y="56" class="lbl" fill="#3fb950">Vout</text>
+  <circle cx="375" cy="60" r="4" fill="#1a7f42"/>
+  <text x="382" y="56" class="lbl" fill="#1a7f42">Vout</text>
   <!-- Bottom rail -->
   <line x1="40" y1="140" x2="40" y2="185" class="wire"/>
   <line x1="40" y1="185" x2="300" y2="185" class="wire"/>
@@ -251,14 +251,14 @@ const FALLBACK_SVGS = {
 </svg>`,
 
   opamp_inverting: `<svg viewBox="0 0 420 240" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
-  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- Vin through input resistor R1 to inverting input -->
-  <text x="18" y="114" class="lbl" fill="#58a6ff">Vin</text>
+  <text x="18" y="114" class="lbl" fill="#2f6feb">Vin</text>
   <line x1="35" y1="110" x2="60" y2="110" class="wire"/>
   <polyline points="60,110 68,110 72,94 80,126 88,94 96,126 104,94 112,126 120,110 128,110" class="sym"/>
   <text x="94" y="86" text-anchor="middle" class="lbl">R1 (Rin)</text>
   <line x1="128" y1="110" x2="190" y2="110" class="wire"/>
-  <circle cx="170" cy="110" r="3" fill="#79c0ff"/>
+  <circle cx="170" cy="110" r="3" fill="#2f6feb"/>
   <!-- Op-amp -->
   <polygon points="190,80 190,180 290,130" class="sym"/>
   <text x="200" y="114" class="lbl">−</text>
@@ -278,15 +278,15 @@ const FALLBACK_SVGS = {
   <line x1="145" y1="211" x2="155" y2="211" class="wire"/>
   <!-- Output -->
   <line x1="290" y1="130" x2="390" y2="130" class="wire"/>
-  <circle cx="330" cy="130" r="3" fill="#79c0ff"/>
-  <circle cx="365" cy="130" r="4" fill="#3fb950"/>
-  <text x="372" y="126" class="lbl" fill="#3fb950">Vout</text>
+  <circle cx="330" cy="130" r="3" fill="#2f6feb"/>
+  <circle cx="365" cy="130" r="4" fill="#1a7f42"/>
+  <text x="372" y="126" class="lbl" fill="#1a7f42">Vout</text>
 </svg>`,
 
   opamp_noninverting: `<svg viewBox="0 0 420 250" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
-  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- Vin to non-inverting (+) input -->
-  <text x="18" y="154" class="lbl" fill="#58a6ff">Vin</text>
+  <text x="18" y="154" class="lbl" fill="#2f6feb">Vin</text>
   <line x1="35" y1="150" x2="190" y2="150" class="wire"/>
   <!-- Op-amp -->
   <polygon points="190,80 190,180 290,130" class="sym"/>
@@ -295,7 +295,7 @@ const FALLBACK_SVGS = {
   <text x="212" y="134" class="lbl">U1</text>
   <!-- Inverting node -->
   <line x1="190" y1="110" x2="160" y2="110" class="wire"/>
-  <circle cx="160" cy="110" r="3" fill="#79c0ff"/>
+  <circle cx="160" cy="110" r="3" fill="#2f6feb"/>
   <!-- Rg (R1) from inv node to ground (vertical) -->
   <polyline points="160,110 160,118 144,124 176,136 144,148 176,160 160,166 160,174" class="sym"/>
   <text x="132" y="145" text-anchor="middle" class="lbl">R1 (Rg)</text>
@@ -311,13 +311,13 @@ const FALLBACK_SVGS = {
   <line x1="330" y1="50" x2="330" y2="130" class="wire"/>
   <!-- Output -->
   <line x1="290" y1="130" x2="390" y2="130" class="wire"/>
-  <circle cx="330" cy="130" r="3" fill="#79c0ff"/>
-  <circle cx="365" cy="130" r="4" fill="#3fb950"/>
-  <text x="372" y="126" class="lbl" fill="#3fb950">Vout</text>
+  <circle cx="330" cy="130" r="3" fill="#2f6feb"/>
+  <circle cx="365" cy="130" r="4" fill="#1a7f42"/>
+  <text x="372" y="126" class="lbl" fill="#1a7f42">Vout</text>
 </svg>`,
 
   zener_regulator: `<svg viewBox="0 0 400 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
-  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- Vin source -->
   <circle cx="40" cy="115" r="20" class="sym"/>
   <text x="40" y="111" text-anchor="middle" class="lbl" font-size="10">Vin</text>
@@ -329,7 +329,7 @@ const FALLBACK_SVGS = {
   <text x="150" y="31" text-anchor="middle" class="lbl">R1</text>
   <line x1="180" y1="55" x2="260" y2="55" class="wire"/>
   <!-- Output node -->
-  <circle cx="260" cy="55" r="3" fill="#79c0ff"/>
+  <circle cx="260" cy="55" r="3" fill="#2f6feb"/>
   <!-- Zener diode: cathode (top) to node, anode (bottom) to ground, reverse-biased -->
   <line x1="260" y1="55" x2="260" y2="84" class="wire"/>
   <polygon points="244,110 276,110 260,84" class="sym"/>
@@ -343,8 +343,8 @@ const FALLBACK_SVGS = {
   <line x1="255" y1="166" x2="265" y2="166" class="wire"/>
   <!-- Vout -->
   <line x1="260" y1="55" x2="350" y2="55" class="wire"/>
-  <circle cx="330" cy="55" r="4" fill="#3fb950"/>
-  <text x="337" y="51" class="lbl" fill="#3fb950">Vout</text>
+  <circle cx="330" cy="55" r="4" fill="#1a7f42"/>
+  <text x="337" y="51" class="lbl" fill="#1a7f42">Vout</text>
   <!-- Source bottom to ground rail -->
   <line x1="40" y1="135" x2="40" y2="185" class="wire"/>
   <line x1="40" y1="185" x2="260" y2="185" class="wire"/>
@@ -352,8 +352,8 @@ const FALLBACK_SVGS = {
 </svg>`,
 
   rc_oscillator: `<svg viewBox="0 0 480 280" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
-  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#c9d1d9}.sym{stroke:#79c0ff;stroke-width:2;fill:none}.wire{stroke:#79c0ff;stroke-width:1.5;fill:none}</style></defs>
-  <text x="240" y="16" text-anchor="middle" class="lbl" fill="#d29922">Wien-Bridge Oscillator</text>
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
+  <text x="240" y="16" text-anchor="middle" class="lbl" fill="#9a6700">Wien-Bridge Oscillator</text>
   <!-- Op-amp -->
   <polygon points="240,80 240,180 340,130" class="sym"/>
   <text x="252" y="114" class="lbl">−</text>
@@ -361,9 +361,9 @@ const FALLBACK_SVGS = {
   <text x="262" y="135" class="lbl">U1</text>
   <!-- Output -->
   <line x1="340" y1="130" x2="450" y2="130" class="wire"/>
-  <circle cx="420" cy="130" r="4" fill="#3fb950"/>
-  <text x="427" y="126" class="lbl" fill="#3fb950">Vout</text>
-  <circle cx="370" cy="130" r="3" fill="#79c0ff"/>
+  <circle cx="420" cy="130" r="4" fill="#1a7f42"/>
+  <text x="427" y="126" class="lbl" fill="#1a7f42">Vout</text>
+  <circle cx="370" cy="130" r="3" fill="#2f6feb"/>
   <!-- Negative feedback: Rf output->inv (top) -->
   <line x1="210" y1="110" x2="210" y2="45" class="wire"/>
   <polyline points="210,45 218,45 222,29 230,61 238,29 246,61 254,29 262,61 270,45 278,45" class="sym"/>
@@ -372,7 +372,7 @@ const FALLBACK_SVGS = {
   <line x1="370" y1="45" x2="370" y2="130" class="wire"/>
   <!-- Inverting input + gain resistor R2 to ground -->
   <line x1="210" y1="110" x2="240" y2="110" class="wire"/>
-  <circle cx="210" cy="110" r="3" fill="#79c0ff"/>
+  <circle cx="210" cy="110" r="3" fill="#2f6feb"/>
   <polyline points="210,110 210,116 194,122 226,132 194,142 226,152 210,158 210,164" class="sym"/>
   <text x="182" y="140" text-anchor="middle" class="lbl">R2</text>
   <line x1="210" y1="164" x2="210" y2="185" class="wire"/>
@@ -381,7 +381,7 @@ const FALLBACK_SVGS = {
   <line x1="205" y1="201" x2="215" y2="201" class="wire"/>
   <!-- Non-inverting (+) node fed by Wien network -->
   <line x1="240" y1="150" x2="150" y2="150" class="wire"/>
-  <circle cx="150" cy="150" r="3" fill="#79c0ff"/>
+  <circle cx="150" cy="150" r="3" fill="#2f6feb"/>
   <!-- Series arm: output tap -> R (series) -> C (series) -> + node -->
   <line x1="370" y1="130" x2="370" y2="245" class="wire"/>
   <polyline points="370,245 362,245 358,229 350,261 342,229 334,261 326,229 318,245 310,245" class="sym"/>
@@ -394,7 +394,7 @@ const FALLBACK_SVGS = {
   <line x1="150" y1="245" x2="150" y2="150" class="wire"/>
   <!-- Parallel arm: + node -> R || C -> ground -->
   <line x1="150" y1="150" x2="90" y2="150" class="wire"/>
-  <circle cx="90" cy="150" r="3" fill="#79c0ff"/>
+  <circle cx="90" cy="150" r="3" fill="#2f6feb"/>
   <!-- parallel R (vertical) -->
   <line x1="90" y1="150" x2="65" y2="150" class="wire"/>
   <polyline points="65,150 65,156 49,162 81,172 49,182 81,192 65,198 65,204" class="sym"/>
@@ -428,8 +428,8 @@ export default function SchematicPanel({ circuit, visible }) {
   if (!circuit) {
     return (
       <div style={panelStyle}>
-        <PanelHeader title="CIRCUIT SCHEMATIC" />
-        <div style={emptyStyle}>Select a circuit to view schematic</div>
+        <PanelHeader title="Schematic" />
+        <div style={emptyStyle}>Run a design to see its schematic.</div>
       </div>
     );
   }
@@ -437,8 +437,8 @@ export default function SchematicPanel({ circuit, visible }) {
   const fallbackSvg = FALLBACK_SVGS[circuit.id];
 
   return (
-    <div style={{ ...panelStyle, opacity: visible ? 1 : 0, transition: "opacity 0.4s ease" }}>
-      <PanelHeader title="CIRCUIT SCHEMATIC" />
+    <div style={{ ...panelStyle, opacity: visible ? 1 : 0, transition: "opacity 0.3s ease" }}>
+      <PanelHeader title="Schematic" />
       <div style={{
         flex: 1,
         display: "flex",
@@ -466,25 +466,23 @@ export default function SchematicPanel({ circuit, visible }) {
         )}
       </div>
       <div style={{
-        padding: "12px 16px 16px",
+        padding: "12px 16px 14px",
         display: "flex",
         justifyContent: "center",
-        borderTop: "1px solid #30363d",
-        background: "#0d1117",
+        borderTop: "1px solid var(--border)",
+        background: "var(--surface-2)",
         flexShrink: 0,
       }}>
-        <span style={{
-          background: visible ? "#1a3a1a" : "transparent",
-          border: `1px solid ${visible ? "#3fb950" : "#30363d"}`,
-          borderRadius: "20px",
-          padding: "5px 16px",
-          color: visible ? "#3fb950" : "#484f58",
-          fontSize: "12px",
-          fontFamily: "'JetBrains Mono', monospace",
-          transition: "all 0.4s ease",
+        <span className="tnum" style={{
+          background: "var(--success-soft)",
+          borderRadius: "999px",
+          padding: "5px 14px",
+          color: "var(--success)",
+          fontSize: "var(--fs-xs)",
+          fontWeight: 600,
           whiteSpace: "nowrap",
         }}>
-          {visible ? circuit.simulationBadge : "Awaiting simulation..."}
+          {circuit.simulationBadge}
         </span>
       </div>
     </div>
@@ -494,13 +492,11 @@ export default function SchematicPanel({ circuit, visible }) {
 function PanelHeader({ title }) {
   return (
     <div style={{
-      padding: "12px 16px 8px",
-      fontSize: "10px",
-      letterSpacing: "0.08em",
-      color: "#8b949e",
-      fontFamily: "'JetBrains Mono', monospace",
+      padding: "13px 18px",
+      fontSize: "var(--fs-sm)",
+      color: "var(--text-2)",
       fontWeight: 600,
-      borderBottom: "1px solid #30363d",
+      borderBottom: "1px solid var(--border)",
       flexShrink: 0,
     }}>
       {title}
@@ -509,9 +505,11 @@ function PanelHeader({ title }) {
 }
 
 const panelStyle = {
-  background: "#161b22",
-  border: "1px solid #30363d",
-  borderRadius: "8px",
+  width: "100%",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--r)",
+  boxShadow: "var(--shadow-sm)",
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
@@ -519,9 +517,9 @@ const panelStyle = {
 };
 
 const emptyStyle = {
-  color: "#484f58",
-  fontFamily: "'JetBrains Mono', monospace",
-  fontSize: "13px",
+  color: "var(--text-3)",
+  fontSize: "var(--fs-sm)",
   padding: "20px",
   textAlign: "center",
+  margin: "auto",
 };

@@ -19,7 +19,7 @@ function EditableCell({ component, onCommit }) {
   }, [component.display, editing]);
 
   if (!component.editable) {
-    return <span style={{ color: "#58a6ff", fontFamily: "'JetBrains Mono', monospace" }}>{component.display}</span>;
+    return <span style={{ color: "#2f6feb", fontFamily: "'JetBrains Mono', monospace" }}>{component.display}</span>;
   }
 
   const commit = () => {
@@ -40,10 +40,11 @@ function EditableCell({ component, onCommit }) {
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setEditing(false); setDraft(component.display); } }}
+        className="tnum"
         style={{
-          background: "#0d1117", border: "1px solid #58a6ff", borderRadius: "4px",
-          color: "#58a6ff", fontFamily: "'JetBrains Mono', monospace", fontSize: "13px",
-          padding: "2px 6px", width: "120px", outline: "none",
+          background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: "6px",
+          color: "var(--text)", fontFamily: "var(--font-mono)", fontSize: "var(--fs-sm)",
+          padding: "3px 7px", width: "120px", outline: "none", boxShadow: "0 0 0 3px var(--accent-soft)",
         }}
       />
     );
@@ -53,14 +54,13 @@ function EditableCell({ component, onCommit }) {
     <span
       onClick={() => setEditing(true)}
       title="Click to edit"
+      className="tnum"
       style={{
-        color: "#58a6ff", fontFamily: "'JetBrains Mono', monospace",
-        cursor: "text", borderBottom: "1px dashed #30363d",
-        paddingBottom: "1px",
+        color: "var(--accent)", fontFamily: "var(--font-mono)", fontWeight: 500,
+        cursor: "text", borderBottom: "1px dashed var(--border-strong)", paddingBottom: "1px",
       }}
     >
       {component.display}
-      <span style={{ color: "#484f58", fontSize: "10px", marginLeft: "4px" }}>✎</span>
     </span>
   );
 }
@@ -75,25 +75,14 @@ export default function ComponentTable({ circuit, visible, onComponentChange, ex
   }
 
   return (
-    <div style={{
-      opacity: visible ? 1 : 0,
-      transition: "opacity 0.4s ease",
-      position: expanded ? "absolute" : "relative",
-      top: expanded ? "0" : "auto",
-      left: expanded ? "0" : "auto",
-      right: expanded ? "0" : "auto",
-      width: expanded ? "100%" : "auto",
-      zIndex: expanded ? 100 : 10,
-      maxHeight: expanded ? "300px" : "40px",
-      overflow: expanded ? "hidden" : "visible",
-    }}>
-      <div style={{ ...panelStyle, height: "100%" }}>
+    <div style={{ opacity: visible ? 1 : 0, transition: "opacity 0.3s ease" }}>
+      <div style={panelStyle}>
         <PanelHeader expanded={expanded} onToggle={onToggleExpand} />
         {expanded && (
-          <div style={{ overflowY: "auto", maxHeight: "260px" }}>
+          <div>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ background: "#21262d" }}>
+                <tr>
                   <th style={thStyle}>Ref</th>
                   <th style={thStyle}>Value</th>
                   <th style={thStyle}>Description</th>
@@ -101,21 +90,21 @@ export default function ComponentTable({ circuit, visible, onComponentChange, ex
               </thead>
               <tbody>
                 {circuit.components.map((c, i) => (
-                  <tr key={i} style={{ background: i % 2 === 0 ? "#1c2128" : "#1a1f27" }}>
-                    <td style={{ ...tdStyle, fontFamily: "'JetBrains Mono', monospace", color: "#8b949e" }}>{c.ref}</td>
+                  <tr key={i}>
+                    <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: "var(--text-2)" }}>{c.ref}</td>
                     <td style={{ ...tdStyle }}>
                       <EditableCell
                         component={c}
                         onCommit={(ref, rawValue) => onComponentChange && onComponentChange(ref, rawValue)}
                       />
                     </td>
-                    <td style={{ ...tdStyle, color: "#8b949e" }}>{c.description}</td>
+                    <td style={{ ...tdStyle, color: "var(--text-2)" }}>{c.description}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div style={{ padding: "6px 16px 8px", fontSize: "10px", color: "#484f58", fontFamily: "'JetBrains Mono', monospace" }}>
-              Click any value to edit — graph updates live
+            <div style={{ padding: "10px 18px 12px", fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>
+              Click any value to edit. The response and simulator update live.
             </div>
           </div>
         )}
@@ -124,18 +113,24 @@ export default function ComponentTable({ circuit, visible, onComponentChange, ex
   );
 }
 
+function Chevron({ open }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform 160ms var(--ease)" }}>
+      <path d="M6 3.5L10.5 8L6 12.5" />
+    </svg>
+  );
+}
+
 function PanelHeader({ expanded, onToggle }) {
   return (
     <div
       onClick={onToggle}
       style={{
-        padding: "10px 16px 8px",
-        fontSize: "10px",
-        letterSpacing: "0.08em",
-        color: "#8b949e",
-        fontFamily: "'JetBrains Mono', monospace",
+        padding: "13px 18px",
+        fontSize: "var(--fs-body)",
+        color: "var(--text)",
         fontWeight: 600,
-        borderBottom: "1px solid #30363d",
+        borderBottom: expanded ? "1px solid var(--border)" : "none",
         cursor: "pointer",
         display: "flex",
         justifyContent: "space-between",
@@ -143,12 +138,12 @@ function PanelHeader({ expanded, onToggle }) {
         userSelect: "none",
       }}
     >
-      <span>COMPONENT LIST</span>
-      <span style={{ color: "#58a6ff", fontSize: "12px" }}>{expanded ? "▼" : "▶"}</span>
+      <span>Component list</span>
+      <span style={{ color: "var(--text-3)", display: "inline-flex" }}><Chevron open={expanded} /></span>
     </div>
   );
 }
 
-const panelStyle = { background: "#1c2128", border: "1px solid #30363d", borderRadius: "8px", overflow: "hidden" };
-const thStyle    = { padding: "8px 16px", textAlign: "left", fontSize: "11px", color: "#8b949e", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, borderBottom: "1px solid #30363d" };
-const tdStyle    = { padding: "8px 16px", fontSize: "13px", color: "#e6edf3", fontFamily: "'Segoe UI', system-ui, sans-serif", borderBottom: "1px solid #21262d" };
+const panelStyle = { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r)", overflow: "hidden", boxShadow: "var(--shadow-sm)" };
+const thStyle    = { padding: "9px 18px", textAlign: "left", fontSize: "var(--fs-xs)", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: "1px solid var(--border)" };
+const tdStyle    = { padding: "10px 18px", fontSize: "var(--fs-sm)", color: "var(--text)", borderBottom: "1px solid var(--border)" };

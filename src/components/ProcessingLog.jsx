@@ -30,8 +30,8 @@ export default function ProcessingLog({ steps, active }) {
   return (
     <div style={{
       flex: "0 0 auto",
-      background: "#010409",
-      border: "1px solid #30363d",
+      background: "#eef1f5",
+      border: "1px solid #dce1e7",
       borderRadius: "8px",
       margin: "0 16px 12px",
       padding: "12px",
@@ -42,7 +42,7 @@ export default function ProcessingLog({ steps, active }) {
       <div style={{
         fontSize: "10px",
         letterSpacing: "0.08em",
-        color: "#8b949e",
+        color: "#5b6774",
         fontFamily: "'JetBrains Mono', 'Courier New', monospace",
         fontWeight: 600,
         marginBottom: "8px",
@@ -50,13 +50,13 @@ export default function ProcessingLog({ steps, active }) {
         PROCESSING LOG
       </div>
       {(!steps || steps.length === 0) && (
-        <div style={{ color: "#484f58", fontFamily: "'JetBrains Mono', monospace", fontSize: "12px" }}>
+        <div style={{ color: "#9aa4b0", fontFamily: "'JetBrains Mono', monospace", fontSize: "12px" }}>
           Awaiting input...
         </div>
       )}
       {steps && steps.slice(0, visibleCount).map((step, i) => (
         <div key={i} style={{
-          color: "#39d353",
+          color: "#1a7f42",
           fontFamily: "'JetBrains Mono', 'Courier New', monospace",
           fontSize: "12px",
           lineHeight: "1.8",
@@ -67,7 +67,7 @@ export default function ProcessingLog({ steps, active }) {
       ))}
       {steps && visibleCount > 0 && !done && (
         <span style={{
-          color: "#39d353",
+          color: "#1a7f42",
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: "12px",
           animation: "blink 1s step-end infinite",
@@ -75,7 +75,7 @@ export default function ProcessingLog({ steps, active }) {
       )}
       {done && steps && steps.length > 0 && (
         <div style={{
-          color: "#7ee787",
+          color: "#1a7f42",
           fontFamily: "'JetBrains Mono', 'Courier New', monospace",
           fontSize: "12px",
           lineHeight: "1.8",

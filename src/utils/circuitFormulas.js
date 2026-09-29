@@ -65,7 +65,7 @@ export function parseDisplayValue(display, hint) {
 // simulation, so we never claim a simulator ran and never print an error figure.
 // Real measured-vs-target error (snapped E-series values vs SPICE) arrives in
 // Phase 2 — see src/sim/spice.js + src/design/loop.js and docs/ROADMAP.md.
-const analyticalBadge = (summary) => `⚙ ${summary} · Analytical (not yet SPICE-verified)`;
+const analyticalBadge = (summary) => `${summary} · Analytical (not yet SPICE-verified)`;
 const analyticalSteps = (resultLine) => [
   '[✓] SPICE netlist generated',
   '[✓] Values computed from design equations (analytical)',
