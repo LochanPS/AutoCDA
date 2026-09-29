@@ -15,6 +15,9 @@ import { runSpice } from "./sim/spice";
 import { parseWithLLM } from "./parse/llmParser";
 import { buildBOM } from "./design/bom";
 import { runToleranceSweep } from "./design/montecarlo";
+
+// Dev-only: register window.__yieldBench() for the yield-aware evaluation.
+if (process.env.NODE_ENV === "development") { import("./eval/yieldBenchmark"); }
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
 // Static fallback data (for kicadSchematic / kicadNetlist fields)

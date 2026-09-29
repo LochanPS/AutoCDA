@@ -34,7 +34,7 @@ function buildHistogram(samples, binCount, lo, hi) {
  * @param {{ runSpice, N?, bins?, onProgress? }} opts
  * @returns {Promise<object>} sweep result (see fields below)
  */
-export async function runToleranceSweep(spec, components, { runSpice, N = 200, bins = 20, onProgress } = {}) {
+export async function runToleranceSweep(spec, components, { runSpice, N = 200, bins = 20, onProgress, draws = null } = {}) {
   const type = spec.type;
   if (!isVerifiable(type)) return { supported: false };
 
@@ -51,20 +51,24 @@ export async function runToleranceSweep(spec, components, { runSpice, N = 200, b
     if (c.unit === "Ω" || c.unit === "F") passiveRefs.push(c.ref);
   }
 
+  // Optional shared draws (common random numbers) for low-noise comparison of
+  // competing designs. Each draw is { ref: fractionalDeviation }.
+  const nRuns = draws ? draws.length : N;
+
   const samples = [];
   let inSpec = 0;
-  for (let i = 0; i < N; i++) {
+  for (let i = 0; i < nRuns; i++) {
     const vals = { ...nominal };
     for (const ref of passiveRefs) {
-      const factor = 1 + (Math.random() * 2 - 1) * tol; // uniform in ±tolerance
-      vals[ref] = nominal[ref] * factor;
+      const frac = draws ? (draws[i][ref] ?? 0) : (Math.random() * 2 - 1) * tol;
+      vals[ref] = nominal[ref] * (1 + frac);
     }
     const measured = await simulateMeasure(type, targets, vals, { runSpice });
     if (measured != null && isFinite(measured)) {
       samples.push(measured);
       if (target && Math.abs((measured - target) / target) <= tol) inSpec += 1;
     }
-    if (onProgress && (i % 5 === 0 || i === N - 1)) onProgress((i + 1) / N);
+    if (onProgress && (i % 5 === 0 || i === nRuns - 1)) onProgress((i + 1) / nRuns);
   }
 
   const n = samples.length;
@@ -75,10 +79,10 @@ export async function runToleranceSweep(spec, components, { runSpice, N = 200, b
 
   return {
     supported: true,
-    N,
+    N: nRuns,
     n,
     samples,
-    yield: inSpec / N, // out of all attempts (failed sims count as out of spec)
+    yield: inSpec / nRuns, // out of all attempts (failed sims count as out of spec)
     inSpec,
     mean,
     std,
