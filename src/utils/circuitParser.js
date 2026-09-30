@@ -12,9 +12,25 @@ import { makeSpec } from '../spec/circuitSpec';
 
 const SI_PREFIX = { p: 1e-12, n: 1e-9, u: 1e-6, µ: 1e-6, μ: 1e-6, m: 1e-3, k: 1e3, K: 1e3, M: 1e6, G: 1e9 };
 
+// A number: integer/decimal, optional scientific notation. Commas are stripped
+// from the text BEFORE matching (see normalize), so "1,500" arrives as "1500".
+const NUM = String.raw`\d+(?:\.\d+)?(?:e[-+]?\d+)?`;
+
+/**
+ * Canonicalize free text before any parsing:
+ *   - strip thousands commas between digits ("1,500" -> "1500")
+ *   - collapse runs of whitespace and trim (so "LOW   PASS" matches "low pass")
+ */
+function normalize(text) {
+  return (text || '')
+    .replace(/(\d),(?=\d{3}(?:\D|$))/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function extractFrequency(text) {
-  // "1kHz", "500 Hz", "2.5 MHz", "1000hz"
-  const re = /(\d+(?:\.\d+)?)\s*([kmgKMG])?\s*(?:hz|hertz|HZ)/i;
+  // "1kHz", "500 Hz", "2.5 MHz", "1000hz", "1e3 Hz"
+  const re = new RegExp(`(${NUM})\\s*([kmgKMG])?\\s*(?:hz|hertz)`, 'i');
   const m = text.match(re);
   if (!m) return null;
   return parseFloat(m[1]) * (SI_PREFIX[m[2]] || 1);
@@ -23,8 +39,8 @@ function extractFrequency(text) {
 function extractVoltage(text, label) {
   // label = optional keyword before the number (e.g. "from", "to", "output", "input")
   const pattern = label
-    ? new RegExp(`${label}\\s+(\\d+(?:\\.\\d+)?)\\s*([kmµuKM])?\\s*v`, 'i')
-    : /(\d+(?:\.\d+)?)\s*([kmµuKM])?\s*v/i;
+    ? new RegExp(`${label}\\s+(${NUM})\\s*([kmµuKM])?\\s*v`, 'i')
+    : new RegExp(`(${NUM})\\s*([kmµuKM])?\\s*v`, 'i');
   const m = text.match(pattern);
   if (!m) return null;
   return parseFloat(m[1]) * (SI_PREFIX[m[2]] || 1);
@@ -32,7 +48,7 @@ function extractVoltage(text, label) {
 
 function extractCurrent(text) {
   // "20mA", "100 mA", "0.02A"
-  const re = /(\d+(?:\.\d+)?)\s*([µuKkm])?\s*(?:a|amp|ampere|amps)/i;
+  const re = new RegExp(`(${NUM})\\s*([µuKkm])?\\s*(?:a|amp|ampere|amps)`, 'i');
   const m = text.match(re);
   if (!m) return null;
   return parseFloat(m[1]) * (SI_PREFIX[m[2]] || 1);
@@ -40,7 +56,7 @@ function extractCurrent(text) {
 
 function extractGain(text) {
   // "gain 20", "gain of 50", "Av=20", "×20", "x20"
-  const re = /(?:gain\s*(?:of)?\s*|av\s*[=:]\s*|[×x]\s*)(\d+(?:\.\d+)?)/i;
+  const re = new RegExp(`(?:gain\\s*(?:of)?\\s*|av\\s*[=:]\\s*|[×x]\\s*)(${NUM})`, 'i');
   const m = text.match(re);
   if (!m) return null;
   return parseFloat(m[1]);
@@ -98,7 +114,7 @@ const CIRCUIT_PATTERNS = [
     keywords: ['band pass', 'band-pass', 'bandpass', 'bp filter'],
     fields: ['fL', 'fH'],
     extract: (text) => {
-      const freqs = [...text.matchAll(/(\d+(?:\.\d+)?)\s*([kmKM])?\s*(?:hz|hertz)/gi)]
+      const freqs = [...text.matchAll(new RegExp(`(${NUM})\\s*([kmKM])?\\s*(?:hz|hertz)`, 'gi'))]
         .map(m => parseFloat(m[1]) * (SI_PREFIX[m[2]] || 1));
       if (freqs.length >= 2) return { fL: Math.min(...freqs), fH: Math.max(...freqs) };
       const fc = extractFrequency(text);
@@ -183,19 +199,35 @@ const CIRCUIT_PATTERNS = [
     keywords: ['voltage divider', 'divider', 'step down', 'step-down', 'level shift'],
     fields: ['Vin', 'Vout'],
     extract: (text) => {
-      let Vin = extractVoltage(text, 'from') || extractVoltage(text, 'input') || extractVoltage(text, 'vin');
-      let Vout = extractVoltage(text, 'to') || extractVoltage(text, 'output') || extractVoltage(text, 'vout');
-      // Fallback: grab all voltages in order.
-      if (!Vin || !Vout) {
-        const allV = [...text.matchAll(/(\d+(?:\.\d+)?)\s*v\b/gi)].map(m => parseFloat(m[1]));
-        if (allV.length >= 2) { Vin = Vin || allV[0]; Vout = Vout || allV[1]; }
+      const has = (x) => x !== null && x !== undefined;
+      let Vin = extractVoltage(text, 'from') ?? extractVoltage(text, 'input') ?? extractVoltage(text, 'vin');
+      let Vout = extractVoltage(text, 'to') ?? extractVoltage(text, 'output') ?? extractVoltage(text, 'vout');
+      // Fallback: grab all voltages in order (use ?? so a legitimate 0 V is kept).
+      if (!has(Vin) || !has(Vout)) {
+        const allV = [...text.matchAll(new RegExp(`(${NUM})\\s*v\\b`, 'gi'))].map(m => parseFloat(m[1]));
+        if (allV.length >= 2) { Vin = has(Vin) ? Vin : allV[0]; Vout = has(Vout) ? Vout : allV[1]; }
       }
       const out = {};
-      if (Vin) out.Vin = Vin;
-      if (Vout) out.Vout = Vout;
+      if (has(Vin)) out.Vin = Vin;
+      if (has(Vout)) out.Vout = Vout;
       return out;
     },
     defaults: { Vin: 12, Vout: 5 },
+  },
+  // Generic op-amp (no inverting/non-inverting stated). MUST come before the
+  // greedy 'amp ' fallback, otherwise "op-amp gain 5" matches 'amp ' and is
+  // mis-typed as a BJT common-emitter. An op-amp request is at least an op-amp;
+  // default to inverting (the canonical textbook op-amp gain stage) and let the
+  // SpecCard switch to non-inverting.
+  {
+    id: 'opamp_inverting',
+    keywords: ['op-amp', 'op amp', 'opamp', 'operational amplifier'],
+    fields: ['Av'],
+    extract: (text) => {
+      const Av = extractGain(text);
+      return Av ? { Av } : {};
+    },
+    defaults: { Av: 10 },
   },
   // GREEDY generic amplifier — MUST stay last. 'amp '/'amplifier' match many
   // prompts, so it only wins when no specific amplifier keyword did. Maps to
@@ -224,13 +256,14 @@ const CIRCUIT_PATTERNS = [
  *   - no keyword matched                            → { type: null, confidence: 0 }
  */
 export function parsePrompt(text) {
-  const lower = (text || '').toLowerCase();
+  const clean = normalize(text);
+  const lower = clean.toLowerCase();
 
   for (const pattern of CIRCUIT_PATTERNS) {
     const matched = pattern.keywords.some(kw => lower.includes(kw));
     if (!matched) continue;
 
-    const extracted = pattern.extract(text) || {};
+    const extracted = pattern.extract(clean) || {};
     const targets = {};
     const assumed = [];
 

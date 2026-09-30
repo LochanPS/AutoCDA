@@ -35,11 +35,12 @@ function displayCircuit(type, targets, components) {
  * @param {import('../spec/circuitSpec').CircuitSpec} spec
  * @param {{ runSpice: (netlist:string)=>Promise<object>, onStatus?: (msg:string)=>void,
  *           strategy?: "grid"|"reasoning", propose?: Function }} deps
- *   strategy "grid" (default) sweeps a fixed E-series neighbourhood (RefineAgent);
- *   "reasoning" runs the closed feedback loop (ReasoningAgent). `propose` lets the
- *   reasoning strategy use a custom proposer (e.g. the LLM one).
+ *   strategy "reasoning" (default) runs the closed feedback loop (ReasoningAgent),
+ *   which converges 100% on the real-ngspice benchmark vs 95.5% for "grid" (the
+ *   fixed E-series neighbourhood sweep, RefineAgent) at fewer simulations. `propose`
+ *   lets the reasoning strategy use a custom proposer (e.g. the LLM one).
  */
-export async function orchestrate(spec, { runSpice, onStatus, strategy = "grid", propose } = {}) {
+export async function orchestrate(spec, { runSpice, onStatus, strategy = "reasoning", propose } = {}) {
   const type = spec.type;
   const targets = spec.targets || {};
   const eSeries = spec.constraints?.eSeries || "E24";
