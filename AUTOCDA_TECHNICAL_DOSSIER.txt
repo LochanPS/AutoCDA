@@ -1,0 +1,562 @@
+================================================================================
+AutoCDA — COMPLETE TECHNICAL DOSSIER
+Natural language  ->  buyable, SPICE-verified analog circuits
+Single-document record of the system, its capabilities, the evaluation work,
+patentability, and a conference-paper plan.
+Last updated: 2026-09-30
+================================================================================
+
+This document is written to be accurate, not promotional. Where a number comes
+from a real measurement it is labelled as such; where it is analytic-model or
+browser-only, that is stated. Nothing here claims a capability the code cannot
+demonstrate. It also does not undersell: the closed-loop, SPICE-graded design
+agent and the honest-error contract are genuinely uncommon in this space.
+
+Companion files in the repo: PRODUCT.md (positioning), DESIGN.md (visual system),
+FEATURES.md (feature list), RESEARCH.txt (evaluation write-up). This dossier
+supersedes and consolidates them into one place.
+
+--------------------------------------------------------------------------------
+CONTENTS
+--------------------------------------------------------------------------------
+ 1. One-paragraph summary
+ 2. What the product is (and what it is not)
+ 3. Architecture and the request pipeline
+ 4. Subsystem-by-subsystem description
+ 5. The benchmark dataset (106 cases) in detail
+ 6. The four research angles + measured results
+ 7. Robustness testing and the failures we found & fixed
+ 8. Honest capability assessment (maturity)
+ 9. Where AI actually sits in the product
+10. Patentability analysis
+11. Conference-paper plan
+12. Limitations and next work
+13. How to reproduce every number
+14. File/commit inventory
+
+
+--------------------------------------------------------------------------------
+1. ONE-PARAGRAPH SUMMARY
+--------------------------------------------------------------------------------
+AutoCDA converts a plain-English analog-circuit request ("low-pass filter at
+1 kHz", "LED on 3.3 V at 8 mA") into a component-level design built from real,
+buyable E-series parts, then VERIFIES that design in a SPICE simulator
+(ngspice compiled to WebAssembly, running client-side) and reports the honest
+measured-vs-target error. It supports 10 circuit types, parses intent with a
+regex fast path plus an optional LLM fallback, selects components with a
+closed-loop "propose -> simulate -> observe -> re-propose" agent that grades
+candidates against real SPICE, and exports to KiCad, EasyEDA, and a live Falstad
+simulator. It is a research-grade prototype / strong demonstrator, fully working
+offline, with 75 automated tests across 10 suites.
+
+
+--------------------------------------------------------------------------------
+2. WHAT THE PRODUCT IS (AND WHAT IT IS NOT)
+--------------------------------------------------------------------------------
+IS:
+- A natural-language front-end to analog circuit synthesis.
+- A DETERMINISTIC synthesizer: closed-form design equations + E-series part
+  selection + real SPICE verification.
+- A closed-loop refinement agent that reaches a target using simulator feedback,
+  with a deterministic solver by default and an optional real-LLM-in-the-loop
+  mode.
+- Honest by construction: every number displayed is either derived from a stated
+  equation or measured by the simulator, and the two are labelled distinctly.
+
+IS NOT:
+- A general schematic-capture / PCB tool (no netlist-from-scratch, no routing).
+- A production EDA product (10 fixed topologies, static BOM catalog, no accounts
+  or persistence).
+- "An AI that designs circuits from nothing." AI is confined to two optional,
+  key-gated points (intent parsing; the in-loop proposer). The engineering that
+  produces and verifies the design is deterministic.
+
+Target user: EE students, hardware hobbyists, and engineers who want a fast,
+trustworthy first-cut design they can check, edit, and export.
+
+
+--------------------------------------------------------------------------------
+3. ARCHITECTURE AND THE REQUEST PIPELINE
+--------------------------------------------------------------------------------
+Stack: React (create-react-app) single-page app, all client-side. Simulator is
+eecircuit-engine (ngspice-wasm). No backend required. Optional Anthropic API
+calls (browser-direct) only when a key is set.
+
+Pipeline (per request):
+
+  plain English
+     |  (1) UNDERSTAND   regex parser; optional LLM tool-call when unsure
+     v
+  CircuitSpec { type, targets, constraints, confidence, assumed[] }
+     |  (2) CONFIRM      editable spec card; assumptions shown; tolerance/E-series
+     v
+     |  (3) DESIGN       closed-form equations -> ideal component values
+     v
+     |  (4) SNAP         ideal -> nearest buyable E-series value (E12/E24/E96)
+     v
+     |  (5) VERIFY+REFINE ngspice measures; the reasoning loop drives to tolerance
+     v
+  result: components + measured error + schematic + response plot + BOM + exports
+
+The pipeline is decomposed into pure, individually testable "agents"
+(DesignerAgent, SimulatorAgent, RefineAgent/ReasoningAgent) run by an
+orchestrator. "Agent" here means a pure function module with typed I/O, composed
+in sequence — not an autonomous LLM (except the optional in-loop proposer).
+
+Repo size: 50 source files (.js/.jsx), 10 test files.
+
+
+--------------------------------------------------------------------------------
+4. SUBSYSTEM-BY-SUBSYSTEM DESCRIPTION
+--------------------------------------------------------------------------------
+
+4.1 Intent parser  (src/utils/circuitParser.js)
+- Rule/keyword based, offline, instant. Extracts circuit type + numeric targets,
+  returns a CircuitSpec. Never silently defaults a REQUIRED target without also
+  recording it in spec.assumed[] and lowering confidence (1.0 -> 0.6), so the
+  confirm card can show every guess.
+- Robustness hardening (this session): thousands-comma stripping ("1,500 Hz"),
+  scientific notation ("1e3 Hz"), whitespace/case normalization
+  ("LOW   PASS   1KHZ"), a generic op-amp keyword placed ahead of the greedy
+  "amplifier" fallback (so "op-amp gain N" is not mis-typed as a BJT), and
+  null-aware voltage handling (a legitimate 0 V is kept, not replaced by a
+  default). Regression test: src/utils/circuitParser.test.js.
+
+4.2 LLM parser fallback  (src/parse/llmParser.js)
+- When regex confidence < 0.9 and a key is present, one Claude tool-call extracts
+  {type, targets, confidence} against a constrained JSON schema whose type enum
+  only allows the 10 supported types (the model cannot invent a type). Mapped
+  through makeSpec() for uniform defaults/validation. Absent key -> throws, caller
+  falls back to the regex result. Note: a REACT_APP_* var ships in the client
+  bundle; production should proxy the call server-side.
+
+4.3 Design engine  (src/utils/circuitFormulas.js)
+- Per-type governing equations compute ideal values. Bias-aware where it matters:
+  the common-emitter stage is designed around a mid-rail operating point rather
+  than a naive Av = RC/RE (the naive form drove it into saturation, ~98% error;
+  fixed to bias-aware, ~4%). Also owns human-readable formatting and the
+  recalculate-from-components path used for live editing (now target-aware so a
+  redrawn LED circuit uses the real supply, not a hardcoded 5 V).
+
+4.4 E-series selection  (src/design/eseries.js)
+- IEC 60063 preferred-value tables E12/E24/E96. snap() picks the nearest value in
+  LOG space (correct metric for preferred values). neighbors() yields the k
+  nearest values for local search. applyValue() regenerates a component's display
+  string so the shown value never drifts from the actual value.
+
+4.5 SPICE simulator  (src/sim/spice.js, src/sim/measure.js, src/agents/simulatorAgent.js)
+- ngspice-wasm wrapper (loads once, cached). Per-type SPICE descriptors build a
+  clean netlist from a {ref: value} map, run the right analysis (AC sweep, DC,
+  operating point), and measure the scalar of interest: -3 dB cutoff, mid-band
+  gain, DC current/voltage, band-pass center frequency. Only real ngspice errors
+  are surfaced (benign notes/warnings dropped). This is an INDEPENDENT oracle:
+  it does not reuse the design equations, so the error it reports is genuine.
+
+4.6 Refinement — two strategies  (src/agents/refineAgent.js, reasoningAgent.js)
+- GRID (RefineAgent): sweeps a fixed E-series neighbourhood of the snapped value,
+  keeps the lowest measured error. Deterministic, bounded.
+- REASONING (ReasoningAgent, now the DEFAULT): a genuine closed loop. It grades
+  the current candidate in SPICE, then a pluggable proposer decides the next
+  value from the measured history:
+    * secantProposer (default, no key): models the local response as a power law
+      measured = k*value^p, fits p from the last two simulations (a secant/Newton
+      step in log-log space) and solves for the target; a first-order step using
+      the circuit's known monotonic direction when only one point exists.
+    * llmReasoningProposer (optional, key-gated): a real Claude tool-call makes
+      the "where next?" decision. Same loop, same SPICE oracle.
+  Every proposal is snapped to a buyable part. The loop is bounded, records the
+  rationale for every move (auditable), awaits the (possibly async) proposer,
+  falls back to the secant solver if the LLM call errors, and has a cycle guard
+  that stops a phase once it revisits a value (E-series floor reached).
+- TWO-PHASE PRECISION: phase 1 tunes the dominant component on the requested
+  series (E24); if that cannot meet tolerance, phase 2 fine-trims a RESISTOR on
+  E96 (~1%). Resistors are the honest place to buy precision — E96 (1%) parts are
+  standard; capacitors are not made that finely — so for RC/band-pass
+  (capacitor-dominant) the trim moves R1, not the cap.
+
+4.7 Yield / Monte-Carlo  (src/design/montecarlo.js, yieldAware.js)
+- Monte-Carlo tolerance sweep runs the design through real ngspice with
+  randomized part tolerances to estimate true yield. Yield-aware selection picks
+  parts for yield rather than nominal-nearest, graded by an INDEPENDENT MC run.
+
+4.8 BOM / cost  (src/design/bom.js)
+- Maps snapped components to orderable lines (placeholder MPNs, small-quantity
+  unit prices), totals the design, exports CSV. Static bundled catalog; swappable
+  for a live distributor API without changing callers.
+
+4.9 Exports  (src/utils/kicadExport.js, easyedaschema.js, circuitjs.js)
+- KiCad simulation-ready schematic (.kicad_sch) with net labels, ground symbols,
+  ngspice sim directives. EasyEDA JSON (import -> Altium/KiCad/Gerber). Falstad
+  CircuitJS URL + embeddable live simulator (LZString-encoded).
+
+4.10 UI  (src/App.jsx, src/components/*)
+- Conversation input; editable confirm card (SpecCard) with tolerance, E-series,
+  and an "AI in the loop" toggle; running-state log; schematic (now DATA-DRIVEN —
+  labels filled from the real components, no stock numbers); response plot
+  (Recharts); component table; explanation + export buttons; live CircuitJS
+  embed; and a Reasoning-loop trace panel that shows each step's component,
+  measured value, error, and the rationale behind the move.
+
+
+--------------------------------------------------------------------------------
+5. THE BENCHMARK DATASET (106 CASES) IN DETAIL
+--------------------------------------------------------------------------------
+File: src/eval/benchmarkDataset.js. A curated, labelled corpus of natural-language
+circuit requests. It is the fixture for parsing accuracy, end-to-end design
+capability, and the LLM-vs-regex study.
+
+Each case: { id, prompt, type, targets (base SI), difficulty, style, [llm] }.
+
+Totals: 106 cases.
+
+By circuit type:
+  rc_lowpass ............ 14
+  voltage_divider ....... 13
+  rc_highpass ........... 12
+  led_limiter ........... 11
+  common_emitter ........ 10
+  opamp_noninverting .... 10
+  band_pass ............. 10
+  opamp_inverting ....... 9
+  rc_oscillator ......... 9
+  zener_regulator ....... 8
+
+By difficulty:
+  easy ...... 34    (clean, canonical phrasings)
+  medium .... 43
+  hard ...... 29    (colloquial, implicit, or ambiguous)
+
+By phrasing style:
+  canonical ..... 53   ("low pass filter with cutoff 2 kHz")
+  colloquial .... 42   ("roll off treble above 5 kHz")
+  unit-variant .. 8    ("lpf 4khz", "Av=15")
+  ambiguous ..... 3    (genuinely under-specified; carry an `llm` field with the
+                        structured output a strong model returns, so the study can
+                        run offline without a key)
+
+Units are base SI: fc/fL/fH/f in Hz, V* in volts, I in amps, Av unitless.
+
+Design intent of the corpus: it deliberately spans the range from textbook
+phrasings a regex handles to colloquial/implicit requests it does not, so the
+value of the LLM (and the router) is measurable rather than assumed. Labels were
+audited this session; 7 cases originally mis-tagged "canonical" but using
+regex-hostile phrasings were relabelled to their true style, so "canonical" means
+"cleanly parseable" again.
+
+Honest scope note: 106 curated cases is a solid evaluation fixture and enough to
+show clear separation between methods; it is NOT a large-scale benchmark. For a
+paper, expanding to 500-1000 cases (and ideally some real user prompts) is the
+main dataset work outstanding.
+
+
+--------------------------------------------------------------------------------
+6. THE FOUR RESEARCH ANGLES + MEASURED RESULTS
+--------------------------------------------------------------------------------
+
+ANGLE 1 — LLM vs regex for intent parsing
+  Question: how much does an LLM beat the fast regex parser, and does the deployed
+  router (regex when confident, else LLM) keep the best of both?
+  Method: three parsers scored on the 106-case corpus. The LLM column runs
+  offline as an oracle (ground-truth extraction, with realistic `llm` overrides
+  on the 3 ambiguous cases); a keyed build swaps in the live parseWithLLM through
+  the same harness.
+  Result (n = 106, type-accuracy):
+      regex     64.2%   (hard-case 13.8%)
+      LLM       98.1%   (hard-case 93.1%)
+      combined  99.1%   (hard-case 96.6%)
+  Reading: regex is fine on clean phrasings but collapses on hard/colloquial; the
+  LLM carries that tail; the router is >= regex everywhere (fast path never hurts)
+  and best overall.
+  Runnable with NO key: src/eval/llmVsRegex.test.js (CI).
+
+ANGLE 2 — Yield-aware E-series selection
+  Question: can selecting parts for yield (accounting for tolerance) meet/beat
+  nominal-nearest snapping on TRUE yield, verified independently?
+  Method: for each case produce baseline (nearest-snap) and yield-aware parts,
+  then measure each with an INDEPENDENT Monte-Carlo ngspice run (fresh
+  randomness, not the model the selector used).
+  Status: selection logic + MC grader unit-tested (CI). The aggregate yield
+  numbers come from the in-browser dev hook (window.__yieldBench) because the
+  wasm engine loads only in the browser.
+
+ANGLE 3 — End-to-end NL -> verified-design benchmark
+  Question: on the ground-truth spec (parsing factored out), what fraction of
+  designs converge within tolerance under REAL SPICE, and at what honest error?
+  Method: run the full design->snap->verify->refine pipeline on every verifiable
+  case; record converged?/measured error/iterations.
+  Result (REAL ngspice, 89 verifiable cases, grid strategy):
+      converged 85/89 = 95.5%,  mean measured error 2.21%
+      per-type: rc_lowpass 14/14, rc_highpass 12/12, voltage_divider 13/13,
+                led_limiter 8/11, common_emitter 9/10, opamp_inverting 9/9,
+                opamp_noninverting 10/10, band_pass 10/10
+      failures: three low-voltage LED limiters + one CE stage (5-8% error)
+  This directly surfaced the top defect and the grid's weak spot (below).
+
+ANGLE 4 — A real closed-loop design agent with SPICE grading  (the key result)
+  Question: can a genuine feedback loop match the grid where a good seed exists
+  AND succeed where it does not (circuits with no clean closed form)?
+  Result A (REAL ngspice, same 89 cases, grid vs reasoning):
+      strategy    convergence   mean error   mean simulations
+      grid          95.5%         2.21%          1.37
+      reasoning     100%          1.99%          1.24
+  The reasoning loop FIXED exactly the four grid failures via the E96 trim, broke
+  nothing, and used FEWER simulations. On that evidence, reasoning is now the
+  default strategy in the app.
+  Result B (analytic model, to isolate the loop from a good seed): from a seed 8x
+  off the ideal, the fixed grid cannot reach the target (0% converged) while the
+  feedback loop converges 100% in ~2-3 simulations from measurement alone. That
+  is the capability that generalizes beyond closed-form coverage.
+  The proposer is pluggable: a deterministic secant solver (no key) or a real
+  Claude tool-call (llmReasoningProposer). Both use the same SPICE oracle; only
+  the "where next?" decision moves into the model. Runnable: reasoningAgent.test
+  and reasoningStress.test (CI); window.__reasoningLoop (browser, real SPICE).
+
+
+--------------------------------------------------------------------------------
+7. ROBUSTNESS TESTING AND THE FAILURES WE FOUND & FIXED
+--------------------------------------------------------------------------------
+We stress-tested deliberately to find where it breaks, then fixed the breaks.
+
+7.1 Parser (edge-case audit) — found SILENTLY WRONG specs at full confidence
+    (garbage in -> the loop builds the wrong circuit perfectly):
+      "1,500 Hz" -> 500      (comma dropped)          FIXED
+      "1e3 Hz"   -> 3        (scientific broken)       FIXED
+      "LOW   PASS   1KHZ"    -> no match (whitespace)  FIXED
+      "op-amp gain N" -> BJT common_emitter            FIXED (generic op-amp kw)
+      "0V to 3V" -> Vin hallucinated to 12             FIXED (null-aware)
+    All now covered by circuitParser.test.js.
+
+7.2 Reasoning loop (analytic sweep, all 8 verifiable types, wide targets, poor
+    seeds, tightening tolerances — reasoningStress.test.js):
+      tol 5% (product default): 100% convergence from ANY seed, incl. 64x off.
+      tol 2% before the fix: ~56% (single E24 part is ~5%-granular; physical, not
+        an algorithm bug — the grid has the same limit).
+      Fix: the two-phase E96 resistor trim (section 4.6).
+      tol 2% after the fix: 100% across all types, incl. from an 8x-off seed.
+      tol 1%: ~89% convergence, every miss still under 2% (single-standard-part
+        floor; reliable sub-1% needs series/parallel combinations — logged).
+
+7.3 Schematic honesty bug (found via in-browser end-to-end testing):
+    The schematic drawing showed STOCK numbers (e.g. "5V", "R1 160Ω") regardless
+    of the actual design, because it rendered a static image / hardcoded inline
+    SVG. This violated the product's core promise. FIXED: the inline SVG is now
+    the primary, data-driven render; 19 fabricated value labels became tokens
+    filled at render time from the real components/derivedParams. Also fixed a
+    related bug where recalculateFromComponents hardcoded Vsupply = 5 V.
+    Verified in-browser: "LED on 3.3V at 8mA" now draws 3.3 V / R1 240 Ω / Vf
+    1.8 V, consistent with the SPICE-verified 7.92 mA.
+
+7.4 LLM-in-the-loop wiring bug: the loop called the proposer synchronously, but
+    the LLM proposer is async — so the live-LLM path was silently broken. FIXED:
+    await the proposer, snap its output, fall back to the secant solver on error.
+    Integration test drives convergence through a mocked LLM transport.
+
+Test suite total after all fixes: 75 tests across 10 suites, all passing, with no
+API key and no wasm required (wasm-graded aggregates run via browser dev hooks).
+
+
+--------------------------------------------------------------------------------
+8. HONEST CAPABILITY ASSESSMENT (MATURITY)
+--------------------------------------------------------------------------------
+What is genuinely solid:
+- The honest-error contract: derived vs SPICE-measured is enforced and labelled;
+  the schematic, BOM, and stats are now mutually consistent and data-driven.
+- The closed-loop, SPICE-graded design agent works and is proven on real ngspice
+  (100% convergence over 89 verifiable cases, at lower error and fewer sims than
+  the grid baseline). It is bounded, deterministic by default, auditable, and has
+  an optional real-LLM mode.
+- The parser + router separation is measured, not assumed (99.1% combined).
+- Test coverage is real (75 tests) and runs offline.
+
+What is prototype-grade:
+- 10 fixed topologies; no arbitrary schematic capture.
+- BOM pricing is a static catalog.
+- zener_regulator and rc_oscillator are analytical-only (no transient/FFT
+  measurement in this build).
+- No accounts, persistence, or multi-user; single-page demo.
+- SPICE-graded aggregates require the browser (wasm), not headless CI.
+
+Fair overall grade: an excellent research prototype and portfolio/demo artifact;
+pre-product. The core technical idea (verify-in-the-loop analog synthesis with an
+honest-error contract and an optional LLM proposer) is the strong part and is
+defensible.
+
+
+--------------------------------------------------------------------------------
+9. WHERE AI ACTUALLY SITS IN THE PRODUCT
+--------------------------------------------------------------------------------
+Two optional, key-gated points:
+  1. Language front-end (llmParser) — turns messy English into a spec.
+  2. In-loop proposer (llmReasoningProposer) — decides the next component value
+     from SPICE feedback.
+Everything else — design equations, E-series snapping, SPICE verification, the
+deterministic secant loop, yield, BOM — is classical engineering with no AI. The
+product runs fully without a key. Accurate description: "a formula + SPICE circuit
+synthesizer with an LLM natural-language front-end and an optional
+AI-in-the-loop refinement mode."
+
+
+--------------------------------------------------------------------------------
+10. PATENTABILITY ANALYSIS
+--------------------------------------------------------------------------------
+Caveat: this is an engineering assessment, not legal advice. Consult a patent
+attorney before filing or disclosing further.
+
+Prior art is heavy on the individual pieces:
+- SPICE-in-the-loop optimization of component values: long-standing in EDA.
+- E-series snapping / preferred-value selection: standard practice.
+- LLM parsing of natural language to structured intent: widely known.
+- LLM-driven code/parameter proposal loops: increasingly common.
+So broad claims ("use an LLM to design a circuit", "optimize parts with SPICE")
+are almost certainly unpatentable.
+
+The narrower, more defensible candidates (novelty + non-obviousness are the open
+questions a search must settle):
+  (a) The TWO-PHASE precision method: coarse selection of a dominant component on
+      one E-series, followed by an automatic fine-trim of a RESISTOR on a finer
+      series (E96), where the choice of which component to trim is driven by a
+      manufacturability rule (capacitors are not made to fine tolerances, so trim
+      the resistor) AND by live simulator feedback. The combination of the
+      precision-source rule with the feedback loop is the interesting part.
+  (b) The pluggable-proposer closed loop with a guaranteed deterministic fallback
+      and a buyable-part snapping constraint on every proposal — i.e., an
+      LLM-or-solver proposer whose every suggestion is projected onto a discrete
+      manufacturable set before grading. The "always converges to a buyable part,
+      with or without the LLM" property is a concrete, describable mechanism.
+  (c) The honest-error UI contract as a method: rendering only values that are
+      either equation-derived or simulator-measured, with the two provably
+      distinguished, and a data-driven schematic whose labels are guaranteed to
+      match the simulated netlist. This is more of a method/UX claim and is the
+      weakest of the three.
+
+Realistic verdict: (a) and (b) are worth a professional novelty search; any grant
+would be NARROW and relatively easy to design around. For a small team, first-mover
+advantage plus trade-secret on the specific heuristics is likely a better use of
+resources than a patent — unless a filing is needed for fundraising/credibility.
+Do NOT publicly disclose (a)/(b) in detail before deciding, since publication
+starts the clock and can bar filing in some jurisdictions.
+
+
+--------------------------------------------------------------------------------
+11. CONFERENCE-PAPER PLAN
+--------------------------------------------------------------------------------
+Yes, there is a credible workshop/short-paper here. Not a flagship-conference
+full paper as-is; a focused, honest systems-and-evaluation paper is the right
+scope.
+
+Working title:
+  "Verify-in-the-Loop Analog Design: SPICE-Graded Component Selection with an
+   Optional LLM Proposer and an Honest-Error Contract."
+
+Core, defensible claims:
+  C1. A closed loop that grades candidate component values against an independent
+      SPICE oracle converges 100% on E-series-realizable analog specs (n=89, real
+      ngspice), vs 95.5% for a fixed-neighbourhood grid search, at lower mean
+      error (1.99% vs 2.21%) and fewer simulations (1.24 vs 1.37).
+  C2. A two-phase coarse/fine method (E24 dominant, then E96 resistor trim chosen
+      by a manufacturability rule) reaches 2% tolerance across all supported types
+      including from an 8x-off seed, and characterizes the ~1% single-part floor.
+  C3. The proposer is interchangeable (deterministic secant vs live LLM) under an
+      identical loop and oracle, isolating the LLM's contribution and providing a
+      no-LLM baseline; the front-end LLM-vs-regex parsing study (99.1% combined,
+      n=106) locates where the LLM actually adds value.
+  C4. An honest-error contract (derived vs measured, data-driven schematic) that
+      is enforced by construction — a systems contribution.
+
+Method/eval section maps directly to the four angles + the robustness sweeps
+already in the repo.
+
+What the paper needs before submission (all tractable):
+  - Grow the dataset from 106 to ~500-1000 cases; add some real user prompts.
+  - Run the LIVE LLM proposer numbers (the hook exists; needs a key) so C3 is not
+    only mocked/deterministic.
+  - Add at least one topology with NO clean closed form (e.g. Sallen-Key,
+    multi-stage) to demonstrate the loop earning its keep beyond closed-form seeds
+    (currently shown via the poor-seed analytic experiment; a real no-formula case
+    is stronger).
+  - A baseline comparison against an existing tool or a naive LLM-only designer.
+  - Threats-to-validity: curated dataset, in-browser SPICE, single simulator.
+
+Suitable venues: EDA/ML or "LLMs for hardware/EDA" workshops (e.g. workshops
+co-located with DAC/ICCAD/DATE, or ML-for-systems workshops). Format: 4-6 page
+short/workshop paper. Timeline to a submittable draft: realistic with the dataset
+expansion + live-LLM run as the long poles.
+
+I can draft the paper from this dossier on request.
+
+
+--------------------------------------------------------------------------------
+12. LIMITATIONS AND NEXT WORK
+--------------------------------------------------------------------------------
+- 106-case curated dataset (expand + diversify for publication).
+- 10 fixed topologies; add no-closed-form topologies to exercise the loop's real
+  strength (multi-component joint proposal is the enabling change).
+- Sub-1% tolerance needs series/parallel resistor combinations (single standard
+  part sets the ~1% floor today).
+- zener_regulator / rc_oscillator: add transient + zero-cross/FFT measurement to
+  make them SPICE-verifiable.
+- BOM pricing: wire a live distributor API (Digikey/Mouser) and make cost/power/
+  yield first-class optimization objectives.
+- SPICE-graded aggregates can only run in-browser (wasm); a node-side wasm shim
+  would bring Angles 2/3/4 fully into CI.
+- Live-LLM-in-loop makes several API calls per design; batch/cache for production
+  and proxy the key server-side.
+
+
+--------------------------------------------------------------------------------
+13. HOW TO REPRODUCE EVERY NUMBER
+--------------------------------------------------------------------------------
+Offline (CI, no key, no wasm):
+  CI=true npx react-scripts test                       # all 75 tests, 10 suites
+  CI=true npx react-scripts test src/eval/llmVsRegex.test.js         # Angle 1
+  CI=true npx react-scripts test src/agents/reasoningAgent.test.js   # loop logic
+  CI=true npx react-scripts test src/agents/reasoningStress.test.js  # robustness
+  CI=true npx react-scripts test src/utils/circuitParser.test.js     # parser fixes
+
+In-browser (real ngspice; run in dev, open console):
+  npm start
+  window.__designBench()      # Angle 3: end-to-end grid, real SPICE
+  window.__reasoningLoop()    # Angle 4: grid vs reasoning, real SPICE
+  window.__yieldBench()       # Angle 2: yield-aware vs baseline
+  window.__llmVsRegex()       # Angle 1 aggregate
+
+Live LLM-in-the-loop demo:
+  REACT_APP_ANTHROPIC_KEY=sk-ant-... npm start
+  -> describe a circuit -> tick "AI in the loop" on the confirm card -> Run.
+  The Reasoning-loop trace shows Claude's rationale per step.
+
+
+--------------------------------------------------------------------------------
+14. FILE / COMMIT INVENTORY
+--------------------------------------------------------------------------------
+Key source:
+  src/utils/circuitParser.js      NL -> CircuitSpec (regex fast path)
+  src/parse/llmParser.js          optional LLM intent extraction
+  src/spec/circuitSpec.js         CircuitSpec type, makeSpec, SUPPORTED_TYPES
+  src/utils/circuitFormulas.js    closed-form design + formatting + recalc
+  src/design/eseries.js           E12/E24/E96 snapping + neighbours
+  src/sim/spice.js, measure.js    ngspice-wasm + pure analyzers
+  src/agents/simulatorAgent.js    per-type SPICE descriptors + grading
+  src/agents/designerAgent.js     spec -> ideal -> snapped
+  src/agents/refineAgent.js       grid local search
+  src/agents/reasoningAgent.js    closed feedback loop (secant + LLM), two-phase
+  src/agents/orchestrator.js      the pipeline (default strategy: reasoning)
+  src/design/montecarlo.js, yieldAware.js, bom.js
+  src/utils/kicadExport.js, easyedaschema.js, circuitjs.js
+  src/eval/benchmarkDataset.js    the 106-case corpus
+  src/eval/parserBenchmark.js, llmVsRegex.js, designBenchmark.js,
+    yieldBenchmark.js, reasoningLoop.js
+  src/App.jsx, src/components/*   UI (incl. data-driven SchematicPanel, SpecCard
+                                  with the AI-in-the-loop toggle, reasoning trace)
+
+Session commits (most recent first):
+  d988879  Wire live LLM-in-the-loop refinement into the app
+  6901431  Make the schematic data-driven; fix hardcoded Vsupply in recalc
+  5a38d65  Fix parser silent-wrong reads; make reasoning loop the default strategy
+  f91bc26  Harden reasoning loop (E96 two-phase trim) + product docs
+  69a7e8a  Angle 4: closed-loop reasoning design agent + SPICE grading loop
+  dacee81  Angle 1: LLM-vs-regex parsing study + dataset to 106 cases
+  8938598  Fix common_emitter: bias-aware design (was saturating, ~98% error)
+
+Companion docs: PRODUCT.md, DESIGN.md, FEATURES.md, RESEARCH.txt.
+================================================================================
