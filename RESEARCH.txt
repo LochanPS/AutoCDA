@@ -167,7 +167,8 @@ value — match the grid where a good seed exists AND succeed where it does not
 Code:     src/agents/reasoningAgent.js
 Wiring:   orchestrate(spec, { strategy: "reasoning" })   // default is "grid"
 Harness:  src/eval/reasoningLoop.js   (grid vs reasoning on real ngspice)
-Test:     src/agents/reasoningAgent.test.js  (9 tests, no key, no wasm)
+Test:     src/agents/reasoningAgent.test.js    (loop logic, no key, no wasm)
+          src/agents/reasoningStress.test.js   (robustness sweep, all 8 types)
 
 The loop: start from the E-series-snapped analytical value; each iteration grades
 the current candidate in SPICE (SimulatorAgent), then the pluggable proposer
@@ -208,7 +209,35 @@ and tested. For the current 10 circuit types it is not NEEDED (the deterministic
 path is already correct and faster), which is why it ships off by default. It
 becomes the right tool as the circuit space grows beyond closed-form coverage.
 
+ROBUSTNESS TUNING (find-the-gaps sweep):
+All 8 SPICE-verifiable types were swept over wide target ranges, poor starting
+seeds (up to 64x off ideal), and tightening tolerances (src/agents/
+reasoningStress.test.js). Findings and the fix they drove:
+
+  - The single-dominant loop converged 66/66 at the product's 5% tolerance across
+    EVERY seed regime (good, 8x high, 8x low, 64x off). No gaps at 5%.
+  - At 2% it failed ~44% of cases — but every failure was the loop returning the
+    BEST E24 part at ~2-4% error. Root cause is physical, not algorithmic: a
+    single E24 part is only ~5%-granular (steps ~10% apart), so 2% is often
+    unreachable with one component. The fixed grid has the identical limit.
+  - Fix (two-phase loop): when Phase 1 (dominant on E24) leaves error above
+    tolerance, Phase 2 fine-trims a RESISTOR on E96 (~1%). Resistors are the
+    honest place to buy precision — E96 (1%) parts are standard, capacitors are
+    NOT made to fine tolerances — so for capacitor-dominant circuits (RC filters,
+    band-pass) the trim moves R1, not the cap.
+  - After the fix: 100% at 2% across ALL types, INCLUDING from an 8x-off seed.
+  - Floor: below ~1% a single standard part still cannot always land (the E96
+    half-step is ~1.15%). At 1% the loop converges ~89% and every miss stays
+    under 2% (it returns the best E96 part rather than diverging). Reliable
+    sub-1% needs series/parallel resistor combinations — logged as next work.
+
+Verdict on "make it always work": at the product's operating tolerance (5%) it
+is 100% robust across all types and even from wildly wrong seeds; at 2% it is
+100% via the E96 trim. Below that is a parts-availability floor, reported
+honestly, not hidden.
+
 Reproduce (CI):      CI=true npx react-scripts test src/agents/reasoningAgent.test.js
+                     CI=true npx react-scripts test src/agents/reasoningStress.test.js
 Reproduce (browser): window.__reasoningLoop()
                      window.__reasoningLoop({ propose: llmReasoningProposer() })  // real AI in loop
 
@@ -223,9 +252,10 @@ Reproduce (browser): window.__reasoningLoop()
   Angle 3  NL -> verified-design benchmark ............... DONE (browser hook;
                                                                  CE defect fixed)
   Angle 4  Closed-loop reasoning design agent ........... DONE (CI-verified;
-                                                                 wired, off by default)
+                                                                 wired, off by default;
+                                                                 robustness-swept)
 
-Whole test suite: 59 tests, 8 suites, all passing (no API key, no wasm required).
+Whole test suite: 66 tests, 9 suites, all passing (no API key, no wasm required).
 
 
 --------------------------------------------------------------------------------

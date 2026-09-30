@@ -90,9 +90,11 @@ export async function orchestrate(spec, { runSpice, onStatus, strategy = "grid",
     };
   }
 
-  const finalComponents = snapped.map((c) =>
-    c.ref === refine.dominant ? applyValue(c, refine.best.candidate) : c
-  );
+  // The reasoning strategy may tune more than the dominant (E96 trim), so it
+  // returns the full component set; the grid strategy tunes only the dominant.
+  const finalComponents = refine.finalComponents
+    ? refine.finalComponents
+    : snapped.map((c) => (c.ref === refine.dominant ? applyValue(c, refine.best.candidate) : c));
   const converged = refine.best.errorPct <= tol;
   status(converged ? "Verified in SPICE" : "Best-effort design");
 

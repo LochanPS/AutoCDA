@@ -30,7 +30,7 @@
  * without the wasm engine, and runs against real ngspice in the app/benchmark.
  */
 
-import { snap, neighbors } from "../design/eseries";
+import { snap, neighbors, applyValue } from "../design/eseries";
 import { simulatorAgent, dominantRef } from "./simulatorAgent";
 
 export const MAX_ITERATIONS = 6;
@@ -117,49 +117,22 @@ const short = (x) =>
   !finite(x) ? String(x) : Math.abs(x) >= 1000 || (Math.abs(x) > 0 && Math.abs(x) < 0.01) ? x.toExponential(2) : x.toPrecision(3);
 
 /**
- * Run the closed loop.
- * @param {Object} input
- * @param {string} input.type
- * @param {Object} input.targets
- * @param {Array}  input.snapped          starting (snapped) components
- * @param {number} [input.tolerance=0.05]
- * @param {string} [input.eSeries="E24"]
- * @param {number} [input.maxIterations=MAX_ITERATIONS]
- * @param {(netlist:string)=>Promise<object>} [input.runSpice]  real SPICE
- * @param {(args:{valueMap:Object})=>Promise<Object>} [input.simulate]  grader override
- * @param {Function} [input.propose=secantProposer]
- * @param {(msg:string)=>void} [input.onStatus]
- * @returns {Promise<{dominant, best, trace, iterations, errors, converged}>}
+ * One single-variable feedback search: tune `ref` (snapped to `series`) with the
+ * given proposer until within tolerance or the iteration budget is spent. Every
+ * other component is held at `base`. Pure over the injected grader.
+ * @returns {Promise<{best, trace, errors}>}
  */
-export async function reasoningAgent({
-  type,
-  targets,
-  snapped,
-  tolerance = 0.05,
-  eSeries = "E24",
-  maxIterations = MAX_ITERATIONS,
-  runSpice,
-  simulate,
-  propose = secantProposer,
-  onStatus,
-}) {
-  const dominant = dominantRef(type);
-  if (!dominant) return { dominant: null, best: null, trace: [], iterations: 0, errors: [], converged: false };
-
-  const grade =
-    simulate || ((args) => simulatorAgent({ type, targets, valueMap: args.valueMap, runSpice }));
-
-  const baseVals = valueMap(snapped);
-  let value = baseVals[dominant];
+async function searchOne({ type, targets, ref, series, base, tolerance, maxIterations, grade, propose, onStatus }) {
+  let value = base[ref];
   const history = [];
   const trace = [];
   let best = null;
   let errors = [];
-  let rationale = "start: E-series-snapped analytical value";
+  let rationale = series === "E96" ? `fine trim: ${ref} on E96` : "start: E-series-snapped analytical value";
 
   for (let i = 0; i < maxIterations; i++) {
-    const vals = { ...baseVals, [dominant]: value };
-    if (onStatus) onStatus(`Reasoning step ${i + 1}/${maxIterations}: try ${dominant}=${short(value)}`);
+    const vals = { ...base, [ref]: value };
+    if (onStatus) onStatus(`Reasoning step ${i + 1}/${maxIterations}: try ${ref}=${short(value)}`);
 
     const sim = await grade({ valueMap: vals });
     errors = sim.errors || [];
@@ -168,22 +141,21 @@ export async function reasoningAgent({
     const errorPct =
       !finite(measured) || !finite(target) || target === 0 ? null : Math.abs((measured - target) / target);
 
-    const step = { ref: dominant, value, measured, errorPct, rationale };
-    trace.push(step);
+    trace.push({ ref, value, measured, errorPct, rationale });
     history.push({ value, measured });
 
     if (errorPct != null && (best == null || errorPct < best.errorPct)) {
-      best = { candidate: value, measured, errorPct };
+      best = { ref, candidate: value, measured, errorPct };
     }
     if (errorPct != null && errorPct <= tolerance) break;
 
-    const next = propose({ type, target, current: value, history, eSeries });
+    const next = propose({ type, target, current: value, history, eSeries: series });
     // Stall guard: if the proposal repeats the current value, nudge one E-series
     // step in the direction the error demands, else stop (no better move exists).
     if (next.value === value) {
       const sign = MONO[type] ?? -1;
       const wantUp = errorPct != null && (measured < target ? sign > 0 : sign < 0);
-      const nb = neighbors(value, eSeries, 1);
+      const nb = neighbors(value, series, 1);
       const nudged = wantUp ? nb[nb.length - 1] : nb[0];
       if (nudged == null || nudged === value) break;
       value = nudged;
@@ -193,6 +165,88 @@ export async function reasoningAgent({
       rationale = next.rationale;
     }
   }
+  return { best, trace, errors };
+}
+
+/**
+ * Run the closed loop.
+ *
+ * Two phases. Phase 1 tunes the dominant component on the requested series (E24
+ * by default). If that alone cannot meet tolerance — inevitable for a tight spec,
+ * since a single E24 part is only ~5% granular — Phase 2 fine-trims a RESISTOR on
+ * E96 (~1%). Resistors are the honest place to buy precision: E96 (1%) parts are
+ * standard, while capacitors are not made to fine tolerances, so for RC/band-pass
+ * (capacitor-dominant) the trim moves R1, not the cap. Each phase gets its own
+ * iteration budget; Phase 2 runs only when Phase 1 leaves error above tolerance.
+ *
+ * @param {Object} input
+ * @param {string} input.type
+ * @param {Object} input.targets
+ * @param {Array}  input.snapped          starting (snapped) components
+ * @param {number} [input.tolerance=0.05]
+ * @param {string} [input.eSeries="E24"]
+ * @param {number} [input.maxIterations=MAX_ITERATIONS]  per-phase budget
+ * @param {boolean} [input.fineTrim=true]  allow the E96 resistor trim phase
+ * @param {(netlist:string)=>Promise<object>} [input.runSpice]  real SPICE
+ * @param {(args:{valueMap:Object})=>Promise<Object>} [input.simulate]  grader override
+ * @param {Function} [input.propose=secantProposer]
+ * @param {(msg:string)=>void} [input.onStatus]
+ * @returns {Promise<{dominant, best, trace, iterations, errors, converged, finalComponents}>}
+ */
+export async function reasoningAgent({
+  type,
+  targets,
+  snapped,
+  tolerance = 0.05,
+  eSeries = "E24",
+  maxIterations = MAX_ITERATIONS,
+  fineTrim = true,
+  runSpice,
+  simulate,
+  propose = secantProposer,
+  onStatus,
+}) {
+  const dominant = dominantRef(type);
+  if (!dominant) return { dominant: null, best: null, trace: [], iterations: 0, errors: [], converged: false, finalComponents: snapped };
+
+  const grade =
+    simulate || ((args) => simulatorAgent({ type, targets, valueMap: args.valueMap, runSpice }));
+
+  const baseVals = valueMap(snapped);
+  const unitOf = (ref) => (snapped.find((c) => c.ref === ref) || {}).unit;
+
+  // Phase 1: coarse search on the dominant component at the requested series.
+  const p1 = await searchOne({ type, targets, ref: dominant, series: eSeries, base: baseVals, tolerance, maxIterations, grade, propose, onStatus });
+  let trace = p1.trace;
+  let errors = p1.errors;
+  let best = p1.best;
+  const finalVals = { ...baseVals };
+  if (best) finalVals[dominant] = best.candidate;
+
+  // Phase 2: E96 resistor trim, only if Phase 1 fell short and a finer part helps.
+  // Dominant is a capacitor (RC / band-pass) → trim R1; else trim the dominant
+  // resistor itself on E96. Skip if that would repeat Phase 1 (already E96).
+  const needTrim = fineTrim && best && best.errorPct > tolerance;
+  if (needTrim) {
+    const fineRef = unitOf(dominant) === "F" ? "R1" : dominant;
+    const fineSeries = "E96";
+    const canHelp = baseVals[fineRef] != null && !(fineRef === dominant && eSeries === fineSeries);
+    if (canHelp) {
+      if (onStatus) onStatus(`Phase 2: fine-trimming ${fineRef} on E96 for ${(tolerance * 100).toFixed(0)}% tolerance`);
+      const base2 = { ...finalVals, [fineRef]: snap(finalVals[fineRef], fineSeries) };
+      const p2 = await searchOne({ type, targets, ref: fineRef, series: fineSeries, base: base2, tolerance, maxIterations, grade, propose, onStatus });
+      trace = trace.concat(p2.trace);
+      if (p2.errors && p2.errors.length) errors = p2.errors;
+      if (p2.best && (!best || p2.best.errorPct < best.errorPct)) {
+        best = p2.best;
+        finalVals[fineRef] = p2.best.candidate;
+      }
+    }
+  }
+
+  const finalComponents = snapped.map((c) =>
+    finalVals[c.ref] != null && finalVals[c.ref] !== c.rawValue ? applyValue(c, finalVals[c.ref]) : c
+  );
 
   return {
     dominant,
@@ -201,6 +255,7 @@ export async function reasoningAgent({
     iterations: trace.length,
     errors,
     converged: !!best && best.errorPct <= tolerance,
+    finalComponents,
   };
 }
 

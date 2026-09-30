@@ -74,9 +74,9 @@ describe("reasoningAgent — closed SPICE-grading loop", () => {
     }
   });
 
-  test("is bounded: never exceeds maxIterations even on a hard target", async () => {
-    const r = await runCase("rc_lowpass", { fc: 12345 }, 0.0001); // unreachable on E24
-    expect(r.iterations).toBeLessThanOrEqual(MAX_ITERATIONS);
+  test("is bounded: never exceeds the two-phase budget even on a hard target", async () => {
+    const r = await runCase("rc_lowpass", { fc: 12345 }, 0.0001); // unreachable even on E96
+    expect(r.iterations).toBeLessThanOrEqual(2 * MAX_ITERATIONS); // coarse + fine phases
     expect(r.best).not.toBeNull(); // still returns the best effort
   });
 });
