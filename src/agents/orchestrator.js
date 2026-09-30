@@ -20,6 +20,7 @@ import { calculateCircuit, recalculateFromComponents } from "../utils/circuitFor
 import { applyValue } from "../design/eseries";
 import { designerAgent } from "./designerAgent";
 import { refineAgent } from "./refineAgent";
+import { reasoningAgent } from "./reasoningAgent";
 import { isVerifiable, circuitTargetInfo } from "./simulatorAgent";
 
 // Rebuild the display circuit (graph/explanation/derived) from final components.
@@ -32,9 +33,13 @@ function displayCircuit(type, targets, components) {
 
 /**
  * @param {import('../spec/circuitSpec').CircuitSpec} spec
- * @param {{ runSpice: (netlist:string)=>Promise<object>, onStatus?: (msg:string)=>void }} deps
+ * @param {{ runSpice: (netlist:string)=>Promise<object>, onStatus?: (msg:string)=>void,
+ *           strategy?: "grid"|"reasoning", propose?: Function }} deps
+ *   strategy "grid" (default) sweeps a fixed E-series neighbourhood (RefineAgent);
+ *   "reasoning" runs the closed feedback loop (ReasoningAgent). `propose` lets the
+ *   reasoning strategy use a custom proposer (e.g. the LLM one).
  */
-export async function orchestrate(spec, { runSpice, onStatus } = {}) {
+export async function orchestrate(spec, { runSpice, onStatus, strategy = "grid", propose } = {}) {
   const type = spec.type;
   const targets = spec.targets || {};
   const eSeries = spec.constraints?.eSeries || "E24";
@@ -65,9 +70,13 @@ export async function orchestrate(spec, { runSpice, onStatus } = {}) {
     };
   }
 
-  // SimulatorAgent + RefineAgent (the E-series local search)
+  // SimulatorAgent + refinement. "grid" sweeps a fixed neighbourhood; "reasoning"
+  // runs the closed propose→grade→re-propose loop. Both return the same shape.
   status("Running the ngspice-wasm simulation");
-  const refine = await refineAgent({ type, targets, snapped, idealComponents, tolerance: tol, eSeries, runSpice, onStatus });
+  const refine =
+    strategy === "reasoning"
+      ? await reasoningAgent({ type, targets, snapped, idealComponents, tolerance: tol, eSeries, runSpice, propose, onStatus })
+      : await refineAgent({ type, targets, snapped, idealComponents, tolerance: tol, eSeries, runSpice, onStatus });
   const info = circuitTargetInfo(type, targets);
   const targetValue = info ? info.value : null;
   const iterations = refine.iterations;

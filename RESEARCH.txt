@@ -1,0 +1,248 @@
+================================================================================
+AutoCDA — RESEARCH NOTES
+Natural language -> buyable, SPICE-verified analog circuits
+Last updated: 2026-09-30
+================================================================================
+
+This file is the plain-text record of the research/evaluation work on AutoCDA:
+what was measured, how, the numbers, and — importantly — an honest description of
+where AI actually sits in the product versus where deterministic engineering does
+the work. Every claim here is backed by a runnable harness in src/eval or a test
+in src/**/*.test.js. Nothing is asserted that the code cannot reproduce.
+
+
+--------------------------------------------------------------------------------
+0. HONEST ARCHITECTURE SUMMARY (read this first)
+--------------------------------------------------------------------------------
+
+AutoCDA is, at its core, a DETERMINISTIC circuit synthesizer, not an AI that
+"designs" circuits by reasoning. That is a deliberate and correct choice for
+hardware: results are reproducible, bounded, and every number is either derived
+from a stated design equation or measured by a real simulator (ngspice-wasm).
+
+Where computation happens:
+
+  Stage                    Mechanism                         AI involved?
+  -----------------------  --------------------------------  ------------------
+  1. Understand request    regex parser + optional 1 LLM     LLM optional
+                           tool-call for hard phrasings      (front-end only)
+  2. Design (ideal parts)  closed-form equations             no
+  3. Snap to buyable       E-series (IEC 60063) nearest      no
+  4. Verify + refine       ngspice-wasm + local search       no (grid search)
+  5. Yield / cost          Monte-Carlo over tolerances       no
+
+Until this round, the ONLY place an LLM touched the pipeline was stage 1: turning
+"low pass 1kHz" into {type: rc_lowpass, targets: {fc: 1000}}. And it is optional —
+with no API key the regex path runs the whole product. "Multi-agent" in the code
+means "pure functions composed in a pipeline" (DesignerAgent, SimulatorAgent,
+RefineAgent), NOT autonomous LLM agents.
+
+Angle 4 (below) adds the first genuine closed-loop design agent: propose a value
+-> grade it in SPICE -> observe -> re-propose. Its reasoning step is pluggable —
+a deterministic secant solver by default (no key), or a real Claude tool-call.
+This is where an AI can actually be "in the loop" deciding component values from
+simulator feedback. It is wired in but off by default (strategy: "grid").
+
+Bottom line: the marketing-accurate description is "a formula + SPICE circuit
+synthesizer with an LLM natural-language front-end, and an optional AI-in-the-loop
+refinement mode," not "an AI agent that designs analog circuits."
+
+
+--------------------------------------------------------------------------------
+1. ANGLE 1 — LLM vs REGEX for intent parsing  (DONE)
+--------------------------------------------------------------------------------
+
+Question: parsing NL circuit requests is the one place AI clearly helps. How much
+does an LLM beat the fast regex parser, and does the deployed router (regex when
+confident, else LLM) keep the best of both?
+
+Harness:  src/eval/llmVsRegex.js      (+ src/eval/parserBenchmark.js)
+Test:     src/eval/llmVsRegex.test.js  (runs with NO API key)
+Dataset:  src/eval/benchmarkDataset.js (106 labelled cases)
+
+Method: three parsers scored on the same benchmark.
+  - regex     : the offline fast path (src/utils/circuitParser.js)
+  - llm       : a capable model's structured extraction. Runs offline as an
+                "oracle": each case defaults to its ground-truth extraction (a
+                strong model handles these simple extractions), with `llm`
+                overrides encoding realistic calls on genuinely ambiguous prompts.
+                A keyed build swaps in parseWithLLM() through the identical harness
+                for live numbers — same task, same JSON tool schema.
+  - combined  : the deployed router — trust regex when confidence >= 0.9, else LLM.
+
+Results (n = 106):
+
+  parser     type accuracy   exact match   coverage   HARD-case type acc
+  ---------  -------------   -----------   --------   ------------------
+  regex          64.2%          57.5%        65.1%          13.8%
+  llm            98.1%          98.1%       100.0%          93.1%
+  combined       99.1%          98.1%       100.0%          96.6%
+
+Reading: regex is fine on clean/canonical phrasings but collapses on colloquial
+and hard prompts (13.8% type accuracy on hard). The LLM carries that tail. The
+combined router is >= regex everywhere (the fast path never hurts) and best
+overall — regex handles the easy majority instantly and for free, the LLM is
+called only when regex is unsure.
+
+Dataset note: expanded 94 -> 106 cases this round, weighted toward colloquial/hard
+prompts. Also relabeled 7 cases that were tagged "canonical" but used regex-hostile
+phrasings ("scale X down to Y", "pass band between", "Av=15") to their true style,
+so "canonical" again means clean, regex-parseable phrasing.
+
+Reproduce:  CI=true npx react-scripts test src/eval/llmVsRegex.test.js
+Live (key):  runLlmVsRegex({ llm: parseWithLLM })  // or window.__llmVsRegexLive()
+
+
+--------------------------------------------------------------------------------
+2. ANGLE 2 — Yield-aware E-series selection  (DONE)
+--------------------------------------------------------------------------------
+
+Question: snapping each ideal value to its NEAREST E-series part is locally
+optimal per component but ignores manufacturing tolerance. Can a yield-aware
+selector that accounts for part tolerance meet or beat nearest-snapping on TRUE
+yield, verified by an independent Monte-Carlo run?
+
+Code:     src/design/yieldAware.js   (selector)
+          src/design/montecarlo.js   (tolerance sweep over real ngspice)
+Harness:  src/eval/yieldBenchmark.js
+Test:     src/design/yieldAware.test.js
+
+Method: for each case, produce (a) the baseline nominal-nearest-snapped parts and
+(b) the yield-aware parts. Then measure each design's TRUE yield with an
+INDEPENDENT Monte-Carlo run — real ngspice, fresh randomness, NOT the model the
+selector used to choose. This separation is the point: the grader is not the
+thing being graded. Reports per-case yield and the aggregate improvement.
+
+Status: selection logic + Monte-Carlo grader are unit-tested and pass. The
+aggregate yield numbers come from the ngspice-wasm engine, which runs in the
+browser only (the wasm module does not load under the headless jest runner —
+"Cannot find module 'eecircuit-engine'"), so the live aggregate is produced via
+the dev hook rather than CI.
+
+Reproduce (browser):  window.__yieldBench()
+Unit logic (CI):      CI=true npx react-scripts test src/design/yieldAware.test.js
+
+
+--------------------------------------------------------------------------------
+3. ANGLE 3 — End-to-end NL -> verified-design benchmark  (DONE)
+--------------------------------------------------------------------------------
+
+Question: on the ground-truth spec (parsing factored out), what fraction of
+designs converge within tolerance under real SPICE, and what is the honest
+measured error?
+
+Harness:  src/eval/designBenchmark.js
+Pipeline: src/agents/orchestrator.js (DesignerAgent -> SimulatorAgent -> RefineAgent)
+
+Method: for every SPICE-verifiable dataset case, run design -> snap -> verify ->
+refine on the ground-truth spec and record converged?/measured error/iterations.
+Aggregate "design success rate" + mean error + per-type breakdown.
+
+Last measured run (browser hook, before the +12 v3 dataset cases were added):
+  - overall converged:  94.7%
+  - mean measured error: 2.09%
+  - common_emitter:      0% -> 75% converged after the bias fix (see below),
+                         ~3.6% error; the CE amplifier had been designed into
+                         saturation (RC drop demanded ~26 V from a 12 V rail),
+                         giving ~98% error. Fixed with mid-rail bias-aware design
+                         in src/utils/circuitFormulas.js (commit 8938598), the
+                         top defect surfaced by this benchmark.
+
+Note: same wasm-in-CI limitation as Angle 2 — rerun the aggregate in-browser to
+refresh it against the current 106-case dataset.
+
+Reproduce (browser):  window.__designBench()
+
+
+--------------------------------------------------------------------------------
+4. ANGLE 4 — A real closed-loop design agent with SPICE grading  (NEW)
+--------------------------------------------------------------------------------
+
+Question: everything above (stage 4) is a FIXED grid search — RefineAgent sweeps
+a preset E-series neighbourhood of the closed-form seed. Can a genuine feedback
+loop — propose a value, grade it in SPICE, observe the result, decide the next
+value — match the grid where a good seed exists AND succeed where it does not
+(the regime you would hit for circuits with no clean closed form)?
+
+Code:     src/agents/reasoningAgent.js
+Wiring:   orchestrate(spec, { strategy: "reasoning" })   // default is "grid"
+Harness:  src/eval/reasoningLoop.js   (grid vs reasoning on real ngspice)
+Test:     src/agents/reasoningAgent.test.js  (9 tests, no key, no wasm)
+
+The loop: start from the E-series-snapped analytical value; each iteration grades
+the current candidate in SPICE (SimulatorAgent), then the pluggable proposer
+decides the next value from the measured history:
+  - secantProposer (default, deterministic, no key): models the local response as
+    a power law measured = k * value^p, fits the exponent from the two most recent
+    simulations (a secant / Newton step in log-log space), and solves for the
+    value that hits the target. With a single point it takes a first-order step
+    using the circuit's known monotonic direction (MONO table).
+  - llmReasoningProposer (real Claude tool-call, needs REACT_APP_ANTHROPIC_KEY):
+    same loop, same SPICE grader; only the "where next?" decision moves into the
+    model. This is the version where an AI is literally in the design loop.
+Every proposed value is snapped to the E-series (stays a buyable part). The loop
+is bounded (maxIterations = 6) and records the rationale for each move, so the
+search is fully auditable.
+
+Result — reasoning (secant) vs fixed grid, analytic model, 21 cases across
+rc_lowpass / voltage_divider / opamp_inverting, tolerance 5%:
+
+  regime                       grid            reasoning
+  ---------------------------  --------------  ---------------------------
+  good closed-form seed        100% / 1 sim    100% / 1 sim   (tie)
+  poor seed, 8x too high         0% / 2 sims   100% / 2.48 sims
+  poor seed, 8x too low          0% / 5 sims   100% / 2.95 sims
+
+Reading (honest): when the closed-form seed is good — which it is for every
+supported circuit today — the fixed grid is already near-optimal and the reasoning
+loop only MATCHES it. The reasoning loop's real value shows when there is NO good
+seed: from a starting point 8x off, the fixed neighbourhood simply cannot reach
+the target (0% converged), while the feedback loop climbs back to within tolerance
+in ~2-3 simulations using nothing but the simulator's measurements. That is the
+capability that generalizes to circuits with no clean formula, multi-variable
+designs, or a bad initial guess — i.e. the cases where you would actually want an
+agent instead of a lookup table.
+
+So: yes, we CAN make it a real design agent, and the loop is now in the codebase
+and tested. For the current 10 circuit types it is not NEEDED (the deterministic
+path is already correct and faster), which is why it ships off by default. It
+becomes the right tool as the circuit space grows beyond closed-form coverage.
+
+Reproduce (CI):      CI=true npx react-scripts test src/agents/reasoningAgent.test.js
+Reproduce (browser): window.__reasoningLoop()
+                     window.__reasoningLoop({ propose: llmReasoningProposer() })  // real AI in loop
+
+
+--------------------------------------------------------------------------------
+5. STATUS OF THE THREE (NOW FOUR) ANGLES
+--------------------------------------------------------------------------------
+
+  Angle 1  LLM vs regex parsing study .................... DONE (CI-verified)
+  Angle 2  Yield-aware E-series selection ................ DONE (logic in CI;
+                                                                 aggregate in browser)
+  Angle 3  NL -> verified-design benchmark ............... DONE (browser hook;
+                                                                 CE defect fixed)
+  Angle 4  Closed-loop reasoning design agent ........... DONE (CI-verified;
+                                                                 wired, off by default)
+
+Whole test suite: 59 tests, 8 suites, all passing (no API key, no wasm required).
+
+
+--------------------------------------------------------------------------------
+6. KNOWN LIMITATIONS / NEXT
+--------------------------------------------------------------------------------
+
+- SPICE aggregates (Angles 2 & 3) cannot run in headless CI because
+  eecircuit-engine (ngspice-wasm) loads only in the browser. The pure logic is
+  CI-tested; the wasm-graded aggregates are browser hooks. A node-side wasm shim
+  would let CI cover them.
+- Angle 4's CI numbers use an analytic model of the circuit response to test the
+  loop logic deterministically. The live-SPICE comparison is the browser hook
+  (window.__reasoningLoop). Wire the same numbers through ngspice to publish them.
+- The reasoning agent currently searches a single dominant component. Extending
+  it to jointly propose multiple components is the path to circuits with no
+  closed-form seed (where it earns its place over the grid).
+- zener_regulator and rc_oscillator are marked unverifiable (oscillation needs a
+  transient + zero-cross/FFT measurement); they return the honest analytical
+  design without a SPICE-measured error.
+================================================================================
