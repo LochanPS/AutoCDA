@@ -266,7 +266,7 @@ export default function App() {
         if (c.ref !== ref) return c;
         return { ...c, rawValue: newRawValue };
       });
-      const recalculated = recalculateFromComponents(prev.id, updatedComponents);
+      const recalculated = recalculateFromComponents(prev.id, updatedComponents, prev.derivedParams);
       if (recalculated) {
         return {
           ...recalculated,

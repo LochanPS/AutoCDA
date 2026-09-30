@@ -25,7 +25,7 @@ import { isVerifiable, circuitTargetInfo } from "./simulatorAgent";
 
 // Rebuild the display circuit (graph/explanation/derived) from final components.
 function displayCircuit(type, targets, components) {
-  const recalced = recalculateFromComponents(type, components);
+  const recalced = recalculateFromComponents(type, components, targets);
   if (recalced) return recalced;
   const base = calculateCircuit(type, targets);
   return base ? { ...base, components } : { id: type, components };

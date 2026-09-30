@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
+import { formatVoltage } from "../utils/circuitFormulas";
 
-/* Inline SVG fallbacks — accurate electronic symbols */
+/* Inline SVG schematics — accurate electronic symbols. Value labels are tokens
+   ({{R1}}, {{C1}}, {{Vin}}, {{Vout}}, {{Vsupply}}, {{D1}}, {{Dz}}) filled from
+   the ACTUAL designed components at render time, so the drawing always shows the
+   real (refined, SPICE-verified) values — never a stock number. */
 const FALLBACK_SVGS = {
   rc_lowpass: `<svg viewBox="0 0 400 210" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
   <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
@@ -13,7 +17,7 @@ const FALLBACK_SVGS = {
   <line x1="40" y1="60" x2="140" y2="60" class="wire"/>
   <!-- Resistor R1 zigzag -->
   <polyline points="140,60 148,60 152,44 160,76 168,44 176,76 184,44 192,60 200,60" class="sym"/>
-  <text x="165" y="35" text-anchor="middle" class="lbl">R1 1kΩ</text>
+  <text x="165" y="35" text-anchor="middle" class="lbl">{{R1}}</text>
   <!-- Wire after R1 -->
   <line x1="200" y1="60" x2="280" y2="60" class="wire"/>
   <!-- Capacitor C1 -->
@@ -21,7 +25,7 @@ const FALLBACK_SVGS = {
   <line x1="293" y1="45" x2="293" y2="75" class="sym" stroke-width="3"/>
   <line x1="280" y1="60" x2="240" y2="60" class="wire"/>
   <line x1="293" y1="60" x2="360" y2="60" class="wire"/>
-  <text x="286" y="35" text-anchor="middle" class="lbl">C1 159nF</text>
+  <text x="286" y="35" text-anchor="middle" class="lbl">{{C1}}</text>
   <!-- C1 to ground -->
   <line x1="286" y1="75" x2="286" y2="140" class="wire"/>
   <line x1="271" y1="140" x2="301" y2="140" class="wire"/>
@@ -48,12 +52,12 @@ const FALLBACK_SVGS = {
   <!-- Capacitor C1 in series -->
   <line x1="130" y1="45" x2="130" y2="75" class="sym" stroke-width="3"/>
   <line x1="143" y1="45" x2="143" y2="75" class="sym" stroke-width="3"/>
-  <text x="136" y="35" text-anchor="middle" class="lbl">C1 318nF</text>
+  <text x="136" y="35" text-anchor="middle" class="lbl">{{C1}}</text>
   <!-- Wire after C1 -->
   <line x1="143" y1="60" x2="220" y2="60" class="wire"/>
   <!-- Resistor R1 to ground (shunt) -->
   <polyline points="220,60 228,60 232,44 240,76 248,44 256,76 264,44 272,60 280,60" class="sym"/>
-  <text x="250" y="35" text-anchor="middle" class="lbl">R1 1kΩ</text>
+  <text x="250" y="35" text-anchor="middle" class="lbl">{{R1}}</text>
   <!-- R1 down to ground -->
   <line x1="220" y1="60" x2="220" y2="100" class="wire"/>
   <line x1="205" y1="140" x2="235" y2="140" class="wire"/>
@@ -74,19 +78,19 @@ const FALLBACK_SVGS = {
   <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- Voltage source -->
   <circle cx="50" cy="130" r="22" class="sym"/>
-  <text x="50" y="124" text-anchor="middle" class="lbl" font-size="10">12V</text>
+  <text x="50" y="124" text-anchor="middle" class="lbl" font-size="10">{{Vin}}</text>
   <text x="50" y="138" text-anchor="middle" class="lbl" font-size="10">Vin</text>
   <!-- Top wire -->
   <line x1="50" y1="108" x2="50" y2="50" class="wire"/>
   <line x1="50" y1="50" x2="160" y2="50" class="wire"/>
   <!-- R1 top zigzag -->
   <polyline points="160,50 168,50 172,34 180,66 188,34 196,66 204,34 212,50 220,50" class="sym"/>
-  <text x="190" y="25" text-anchor="middle" class="lbl">R1 1.4kΩ</text>
+  <text x="190" y="25" text-anchor="middle" class="lbl">{{R1}}</text>
   <!-- Middle node wire -->
   <line x1="220" y1="50" x2="220" y2="130" class="wire"/>
   <!-- R2 bottom zigzag -->
   <polyline points="220,130 228,130 232,114 240,146 248,114 256,146 264,114 272,130 280,130" class="sym"/>
-  <text x="250" y="105" text-anchor="middle" class="lbl">R2 1kΩ</text>
+  <text x="250" y="105" text-anchor="middle" class="lbl">{{R2}}</text>
   <!-- Ground -->
   <line x1="280" y1="130" x2="280" y2="210" class="wire"/>
   <line x1="265" y1="210" x2="295" y2="210" class="wire"/>
@@ -94,7 +98,7 @@ const FALLBACK_SVGS = {
   <line x1="275" y1="226" x2="285" y2="226" class="wire"/>
   <!-- Vout at middle node -->
   <circle cx="220" cy="130" r="5" fill="#1a7f42"/>
-  <text x="220" y="155" text-anchor="middle" class="lbl" fill="#1a7f42">Vout=5V</text>
+  <text x="220" y="155" text-anchor="middle" class="lbl" fill="#1a7f42">{{Vout}}</text>
   <!-- Bottom wire -->
   <line x1="50" y1="152" x2="50" y2="210" class="wire"/>
   <line x1="50" y1="210" x2="280" y2="210" class="wire"/>
@@ -104,20 +108,20 @@ const FALLBACK_SVGS = {
   <defs><style>.lbl{font:12px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- Voltage source -->
   <circle cx="40" cy="110" r="20" class="sym"/>
-  <text x="40" y="105" text-anchor="middle" class="lbl" font-size="10">5V</text>
+  <text x="40" y="105" text-anchor="middle" class="lbl" font-size="10">{{Vsupply}}</text>
   <text x="40" y="119" text-anchor="middle" class="lbl" font-size="10">Vin</text>
   <!-- Top wire -->
   <line x1="40" y1="90" x2="40" y2="60" class="wire"/>
   <line x1="40" y1="60" x2="120" y2="60" class="wire"/>
   <!-- Resistor R1 zigzag -->
   <polyline points="120,60 128,60 132,44 140,76 148,44 156,76 164,44 172,60 180,60" class="sym"/>
-  <text x="150" y="35" text-anchor="middle" class="lbl">R1 160Ω</text>
+  <text x="150" y="35" text-anchor="middle" class="lbl">{{R1}}</text>
   <!-- Wire to LED -->
   <line x1="180" y1="60" x2="230" y2="60" class="wire"/>
   <!-- LED symbol: triangle + bar diode -->
   <polygon points="230,44 230,76 262,60" fill="#1a7f42" fill-opacity="0.3" stroke="#1a7f42" stroke-width="2"/>
   <line x1="262" y1="44" x2="262" y2="76" stroke="#1a7f42" stroke-width="2.5"/>
-  <text x="246" y="100" text-anchor="middle" class="lbl">D1 Vf=1.8V</text>
+  <text x="246" y="100" text-anchor="middle" class="lbl">{{D1}}</text>
   <!-- LED emission arrows -->
   <line x1="270" y1="45" x2="285" y2="30" stroke="#9a6700" stroke-width="1.5"/>
   <polygon points="285,30 278,33 282,37" fill="#9a6700"/>
@@ -142,7 +146,7 @@ const FALLBACK_SVGS = {
   <text x="260" y="8" text-anchor="middle" class="lbl" fill="#9a6700">VCC 12V</text>
   <!-- RC collector resistor -->
   <polyline points="260,30 267,30 270,18 276,42 282,18 288,42 294,18 300,30 307,30" class="sym"/>
-  <text x="283" y="12" text-anchor="middle" class="lbl">RC 10kΩ</text>
+  <text x="283" y="12" text-anchor="middle" class="lbl">{{RC}}</text>
   <!-- Wire from RC to collector -->
   <line x1="260" y1="50" x2="260" y2="80" class="wire"/>
   <!-- BJT NPN symbol -->
@@ -167,12 +171,12 @@ const FALLBACK_SVGS = {
   <line x1="160" y1="10" x2="160" y2="30" class="wire"/>
   <text x="160" y="8" text-anchor="middle" class="lbl" fill="#9a6700">VCC</text>
   <polyline points="160,30 168,30 171,18 177,42 183,18 189,42 195,18 201,30 208,30" class="sym"/>
-  <text x="180" y="12" text-anchor="middle" class="lbl">R1 100kΩ</text>
+  <text x="180" y="12" text-anchor="middle" class="lbl">{{R1}}</text>
   <line x1="160" y1="50" x2="160" y2="120" class="wire"/>
   <line x1="160" y1="120" x2="200" y2="120" class="wire"/>
   <!-- R2 bottom bias -->
   <polyline points="160,120 168,120 171,108 177,132 183,108 189,132 195,108 201,120 208,120" class="sym"/>
-  <text x="184" y="104" text-anchor="middle" class="lbl">R2 20kΩ</text>
+  <text x="184" y="104" text-anchor="middle" class="lbl">{{R2}}</text>
   <line x1="160" y1="140" x2="160" y2="220" class="wire"/>
   <!-- Ground symbols -->
   <line x1="145" y1="220" x2="175" y2="220" class="wire"/>
@@ -181,7 +185,7 @@ const FALLBACK_SVGS = {
   <!-- RE emitter resistor -->
   <line x1="270" y1="160" x2="270" y2="175" class="wire"/>
   <polyline points="270,175 278,175 281,163 287,187 293,163 299,187 305,163 311,175 318,175" class="sym"/>
-  <text x="294" y="196" text-anchor="middle" class="lbl">RE 500Ω</text>
+  <text x="294" y="196" text-anchor="middle" class="lbl">{{RE}}</text>
   <line x1="270" y1="195" x2="270" y2="220" class="wire"/>
   <line x1="255" y1="220" x2="285" y2="220" class="wire"/>
   <line x1="260" y1="228" x2="280" y2="228" class="wire"/>
@@ -191,7 +195,7 @@ const FALLBACK_SVGS = {
   <line x1="110" y1="107" x2="110" y2="133" stroke="#2f6feb" stroke-width="3"/>
   <line x1="123" y1="107" x2="123" y2="133" stroke="#2f6feb" stroke-width="3"/>
   <line x1="123" y1="120" x2="160" y2="120" class="wire"/>
-  <text x="116" y="100" text-anchor="middle" class="lbl">C1 10µF</text>
+  <text x="116" y="100" text-anchor="middle" class="lbl">{{C1}}</text>
   <!-- Vin -->
   <line x1="60" y1="120" x2="80" y2="120" class="wire"/>
   <text x="45" y="120" text-anchor="middle" class="lbl" fill="#2f6feb">Vin</text>
@@ -321,7 +325,7 @@ const FALLBACK_SVGS = {
   <!-- Vin source -->
   <circle cx="40" cy="115" r="20" class="sym"/>
   <text x="40" y="111" text-anchor="middle" class="lbl" font-size="10">Vin</text>
-  <text x="40" y="125" text-anchor="middle" class="lbl" font-size="10">12V</text>
+  <text x="40" y="125" text-anchor="middle" class="lbl" font-size="10">{{Vin}}</text>
   <line x1="40" y1="95" x2="40" y2="55" class="wire"/>
   <line x1="40" y1="55" x2="120" y2="55" class="wire"/>
   <!-- Series resistor R1 -->
@@ -336,7 +340,7 @@ const FALLBACK_SVGS = {
   <line x1="244" y1="84" x2="276" y2="84" class="sym"/>
   <line x1="244" y1="84" x2="237" y2="77" class="sym"/>
   <line x1="276" y1="84" x2="283" y2="91" class="sym"/>
-  <text x="294" y="100" class="lbl">Dz 5V</text>
+  <text x="294" y="100" class="lbl">{{Dz}}</text>
   <line x1="260" y1="110" x2="260" y2="150" class="wire"/>
   <line x1="245" y1="150" x2="275" y2="150" class="wire"/>
   <line x1="250" y1="158" x2="270" y2="158" class="wire"/>
@@ -416,6 +420,33 @@ const FALLBACK_SVGS = {
 </svg>`,
 };
 
+/**
+ * Fill an inline schematic template's value tokens from the real design. A ref
+ * token (R1/R2/RC/RE/C1/C2/Rf) becomes "REF <display>"; a diode token
+ * (D1/Dz) uses the component's own Vf/Vz display; voltage tokens format the
+ * corresponding derivedParam. Missing values fall back to the bare reference so
+ * a partial design still renders a labelled (never falsely numbered) schematic.
+ */
+function schematicWithValues(circuit) {
+  const base = FALLBACK_SVGS[circuit.id];
+  if (!base) return null;
+  const byRef = Object.fromEntries((circuit.components || []).map((c) => [c.ref, c]));
+  const dp = circuit.derivedParams || {};
+  const refLbl = (r) => (byRef[r] && byRef[r].display ? `${r} ${byRef[r].display}` : r);
+  const diode = (r) => (byRef[r] && byRef[r].display ? byRef[r].display : r);
+  const volt = (x, prefix, fallback) =>
+    typeof x === "number" && isFinite(x) ? `${prefix}${formatVoltage(x)}` : fallback;
+  const map = {
+    R1: refLbl("R1"), R2: refLbl("R2"), RC: refLbl("RC"), RE: refLbl("RE"),
+    C1: refLbl("C1"), C2: refLbl("C2"), Rf: refLbl("Rf"),
+    D1: diode("D1"), Dz: diode("Dz"),
+    Vin: volt(dp.Vin, "", "Vin"),
+    Vsupply: volt(dp.Vsupply, "", "Vin"),
+    Vout: volt(dp.Vout, "Vout=", "Vout"),
+  };
+  return base.replace(/\{\{(\w+)\}\}/g, (_, k) => (map[k] != null ? map[k] : k));
+}
+
 export default function SchematicPanel({ circuit, visible }) {
   const [imgError, setImgError] = useState(false);
   const [key, setKey] = useState(0);
@@ -434,7 +465,9 @@ export default function SchematicPanel({ circuit, visible }) {
     );
   }
 
-  const fallbackSvg = FALLBACK_SVGS[circuit.id];
+  // Prefer the inline, DATA-DRIVEN schematic (labels filled from the real design)
+  // over the static /schematics/*.svg image, which carries stock example numbers.
+  const liveSvg = schematicWithValues(circuit);
 
   return (
     <div style={{ ...panelStyle, opacity: visible ? 1 : 0, transition: "opacity 0.3s ease" }}>
@@ -448,18 +481,19 @@ export default function SchematicPanel({ circuit, visible }) {
         minHeight: 0,
         overflow: "hidden",
       }}>
-        {!imgError ? (
+        {liveSvg ? (
+          <div
+            key={key}
+            style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
+            dangerouslySetInnerHTML={{ __html: liveSvg }}
+          />
+        ) : !imgError && circuit.schematic ? (
           <img
             key={key}
             src={circuit.schematic}
             alt={circuit.name}
             onError={() => setImgError(true)}
             style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }}
-          />
-        ) : fallbackSvg ? (
-          <div
-            style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
-            dangerouslySetInnerHTML={{ __html: fallbackSvg }}
           />
         ) : (
           <div style={emptyStyle}>Schematic unavailable</div>

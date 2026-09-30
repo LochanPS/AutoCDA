@@ -455,7 +455,7 @@ export function calculateCircuit(circuitId, params) {
 }
 
 // Recalculate graph when user edits a component value
-export function recalculateFromComponents(circuitId, components) {
+export function recalculateFromComponents(circuitId, components, targets = {}) {
   const get = (ref) => components.find(c => c.ref === ref)?.rawValue;
 
   switch (circuitId) {
@@ -478,7 +478,11 @@ export function recalculateFromComponents(circuitId, components) {
     case 'led_limiter': {
       const R = get('R1'), Vf = get('D1');
       if (!R) return null;
-      return ledLimiter({ Vsupply: 5, I: (5 - (Vf || 1.8)) / R, Vf: Vf || 1.8 });
+      // Use the REAL supply from the spec, not a hardcoded 5 V, so the redrawn
+      // circuit and its derived current match the design that was simulated.
+      const Vsupply = typeof targets.Vsupply === 'number' ? targets.Vsupply : 5;
+      const vf = Vf || 1.8;
+      return ledLimiter({ Vsupply, I: (Vsupply - vf) / R, Vf: vf });
     }
     case 'common_emitter': {
       const RC = get('RC'), RE = get('RE');
