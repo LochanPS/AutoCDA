@@ -53,7 +53,7 @@ export const DATASET = [
   { id: "ce1", prompt: "common emitter amplifier gain 20", type: "common_emitter", targets: { Av: 20 }, difficulty: "easy", style: "canonical" },
   { id: "ce2", prompt: "BJT amplifier with voltage gain 50", type: "common_emitter", targets: { Av: 50 }, difficulty: "medium", style: "canonical" },
   { id: "ce3", prompt: "transistor amp gain of 30", type: "common_emitter", targets: { Av: 30 }, difficulty: "medium", style: "colloquial" },
-  { id: "ce4", prompt: "common-emitter stage, Av=15", type: "common_emitter", targets: { Av: 15 }, difficulty: "medium", style: "canonical" },
+  { id: "ce4", prompt: "common-emitter stage, Av=15", type: "common_emitter", targets: { Av: 15 }, difficulty: "medium", style: "unit-variant" },
 
   // ── opamp_inverting ─────────────────────────────────────────────────────────
   { id: "inv1", prompt: "inverting amplifier gain 10", type: "opamp_inverting", targets: { Av: 10 }, difficulty: "easy", style: "canonical" },
@@ -70,7 +70,7 @@ export const DATASET = [
   // ── band_pass ───────────────────────────────────────────────────────────────
   { id: "bp1", prompt: "band pass filter 200Hz to 2kHz", type: "band_pass", targets: { fL: 200, fH: 2000 }, difficulty: "easy", style: "canonical" },
   { id: "bp2", prompt: "bandpass from 300 to 3000 Hz", type: "band_pass", targets: { fL: 300, fH: 3000 }, difficulty: "easy", style: "canonical" },
-  { id: "bp3", prompt: "pass band between 1kHz and 10kHz", type: "band_pass", targets: { fL: 1000, fH: 10000 }, difficulty: "medium", style: "canonical" },
+  { id: "bp3", prompt: "pass band between 1kHz and 10kHz", type: "band_pass", targets: { fL: 1000, fH: 10000 }, difficulty: "medium", style: "colloquial" },
   { id: "bp4", prompt: "band-pass filter for audio, 100Hz to 8kHz", type: "band_pass", targets: { fL: 100, fH: 8000 }, difficulty: "hard", style: "colloquial" },
 
   // ── zener_regulator ─────────────────────────────────────────────────────────
@@ -83,6 +83,95 @@ export const DATASET = [
   { id: "osc2", prompt: "RC oscillator at 2 kHz", type: "rc_oscillator", targets: { f: 2000 }, difficulty: "medium", style: "canonical" },
   { id: "osc3", prompt: "phase shift oscillator 1kHz", type: "rc_oscillator", targets: { f: 1000 }, difficulty: "medium", style: "canonical" },
   { id: "osc4", prompt: "generate a 500 Hz sine wave", type: "rc_oscillator", targets: { f: 500 }, difficulty: "hard", style: "colloquial" },
+
+  // ── expansion set (v2) ────────────────────────────────────────────────────────
+  // rc_lowpass
+  { id: "lp7", prompt: "lowpass 2.2 kHz", type: "rc_lowpass", targets: { fc: 2200 }, difficulty: "easy", style: "unit-variant" },
+  { id: "lp8", prompt: "anti-aliasing low pass at 20 kHz", type: "rc_lowpass", targets: { fc: 20000 }, difficulty: "medium", style: "canonical" },
+  { id: "lp9", prompt: "smooth a PWM signal, cut above 100 Hz", type: "rc_lowpass", targets: { fc: 100 }, difficulty: "hard", style: "colloquial" },
+  { id: "lp10", prompt: "single-pole LPF, fc = 6.8kHz", type: "rc_lowpass", targets: { fc: 6800 }, difficulty: "medium", style: "unit-variant" },
+  { id: "lp11", prompt: "roll off treble above 5 kHz", type: "rc_lowpass", targets: { fc: 5000 }, difficulty: "hard", style: "colloquial" },
+  { id: "lp12", prompt: "low pass filter cutoff 250 Hz", type: "rc_lowpass", targets: { fc: 250 }, difficulty: "easy", style: "canonical" },
+
+  // rc_highpass
+  { id: "hp6", prompt: "highpass 1.5 kHz", type: "rc_highpass", targets: { fc: 1500 }, difficulty: "easy", style: "unit-variant" },
+  { id: "hp7", prompt: "remove low frequency rumble below 30 Hz", type: "rc_highpass", targets: { fc: 30 }, difficulty: "hard", style: "colloquial" },
+  { id: "hp8", prompt: "AC coupling high pass at 20 Hz", type: "rc_highpass", targets: { fc: 20 }, difficulty: "medium", style: "canonical" },
+  { id: "hp9", prompt: "single pole HPF fc 4.7 kHz", type: "rc_highpass", targets: { fc: 4700 }, difficulty: "medium", style: "unit-variant" },
+  { id: "hp10", prompt: "pass only frequencies above 2 kHz", type: "rc_highpass", targets: { fc: 2000 }, difficulty: "hard", style: "colloquial" },
+
+  // voltage_divider
+  { id: "vd7", prompt: "voltage divider 3.3V to 1.65V", type: "voltage_divider", targets: { Vin: 3.3, Vout: 1.65 }, difficulty: "easy", style: "canonical" },
+  { id: "vd8", prompt: "scale 24V down to 12V", type: "voltage_divider", targets: { Vin: 24, Vout: 12 }, difficulty: "easy", style: "colloquial" },
+  { id: "vd9", prompt: "halve a 5 volt reference", type: "voltage_divider", targets: { Vin: 5, Vout: 2.5 }, difficulty: "hard", style: "colloquial" },
+  { id: "vd10", prompt: "get 0.5V out of 5V for an ADC", type: "voltage_divider", targets: { Vin: 5, Vout: 0.5 }, difficulty: "medium", style: "colloquial" },
+  { id: "vd11", prompt: "divide 3.3 to 2.0 volts", type: "voltage_divider", targets: { Vin: 3.3, Vout: 2.0 }, difficulty: "medium", style: "colloquial" },
+  { id: "vd12", prompt: "step 48V down to 3.3V", type: "voltage_divider", targets: { Vin: 48, Vout: 3.3 }, difficulty: "medium", style: "colloquial" },
+
+  // led_limiter
+  { id: "led6", prompt: "LED series resistor 12V 20mA", type: "led_limiter", targets: { Vsupply: 12, I: 0.02 }, difficulty: "easy", style: "canonical" },
+  { id: "led7", prompt: "run an indicator LED off 24V at 10mA", type: "led_limiter", targets: { Vsupply: 24, I: 0.01 }, difficulty: "medium", style: "colloquial" },
+  { id: "led8", prompt: "current limit an LED at 25mA from 5 volts", type: "led_limiter", targets: { Vsupply: 5, I: 0.025 }, difficulty: "medium", style: "canonical" },
+  { id: "led9", prompt: "LED on 3.3V, 8 mA", type: "led_limiter", targets: { Vsupply: 3.3, I: 0.008 }, difficulty: "easy", style: "canonical" },
+  { id: "led10", prompt: "dim an LED to 2mA on a 5V rail", type: "led_limiter", targets: { Vsupply: 5, I: 0.002 }, difficulty: "hard", style: "colloquial" },
+
+  // common_emitter
+  { id: "ce5", prompt: "common emitter amplifier gain 10", type: "common_emitter", targets: { Av: 10 }, difficulty: "easy", style: "canonical" },
+  { id: "ce6", prompt: "single-transistor amplifier, gain 25", type: "common_emitter", targets: { Av: 25 }, difficulty: "medium", style: "colloquial" },
+  { id: "ce7", prompt: "CE stage with Av of 40", type: "common_emitter", targets: { Av: 40 }, difficulty: "medium", style: "colloquial" },
+  { id: "ce8", prompt: "npn common emitter, gain 12", type: "common_emitter", targets: { Av: 12 }, difficulty: "easy", style: "canonical" },
+
+  // opamp_inverting
+  { id: "inv5", prompt: "inverting amp gain 20", type: "opamp_inverting", targets: { Av: 20 }, difficulty: "easy", style: "canonical" },
+  { id: "inv6", prompt: "inverting configuration, Av = 50", type: "opamp_inverting", targets: { Av: 50 }, difficulty: "medium", style: "canonical" },
+  { id: "inv7", prompt: "flip and scale a signal by 4", type: "opamp_inverting", targets: { Av: 4 }, difficulty: "hard", style: "colloquial" },
+  { id: "inv8", prompt: "op amp inverting gain 2.5", type: "opamp_inverting", targets: { Av: 2.5 }, difficulty: "medium", style: "canonical" },
+
+  // opamp_noninverting
+  { id: "ninv5", prompt: "non-inverting amp gain 5", type: "opamp_noninverting", targets: { Av: 5 }, difficulty: "easy", style: "canonical" },
+  { id: "ninv6", prompt: "non inverting op amp, Av = 21", type: "opamp_noninverting", targets: { Av: 21 }, difficulty: "medium", style: "canonical" },
+  { id: "ninv7", prompt: "amplify by 10 keeping the same polarity", type: "opamp_noninverting", targets: { Av: 10 }, difficulty: "hard", style: "colloquial" },
+  { id: "ninv8", prompt: "make a 2x buffer amplifier", type: "opamp_noninverting", targets: { Av: 2 }, difficulty: "hard", style: "colloquial" },
+
+  // band_pass
+  { id: "bp5", prompt: "bandpass 500 Hz to 5 kHz", type: "band_pass", targets: { fL: 500, fH: 5000 }, difficulty: "easy", style: "canonical" },
+  { id: "bp6", prompt: "band pass filter 1kHz to 4kHz", type: "band_pass", targets: { fL: 1000, fH: 4000 }, difficulty: "easy", style: "canonical" },
+  { id: "bp7", prompt: "isolate the 300-3400 Hz voice band", type: "band_pass", targets: { fL: 300, fH: 3400 }, difficulty: "hard", style: "colloquial" },
+  { id: "bp8", prompt: "pass 2kHz through 20kHz", type: "band_pass", targets: { fL: 2000, fH: 20000 }, difficulty: "medium", style: "colloquial" },
+
+  // zener_regulator
+  { id: "zn4", prompt: "zener regulator 24V to 12V", type: "zener_regulator", targets: { Vin: 24, Vz: 12 }, difficulty: "easy", style: "canonical" },
+  { id: "zn5", prompt: "clamp a 12V rail to 3.3V with a zener", type: "zener_regulator", targets: { Vin: 12, Vz: 3.3 }, difficulty: "medium", style: "colloquial" },
+  { id: "zn6", prompt: "zener shunt regulator, input 9V, output 5.6V", type: "zener_regulator", targets: { Vin: 9, Vz: 5.6 }, difficulty: "medium", style: "canonical" },
+  { id: "zn7", prompt: "regulate 18 volts to 6.2 volts using a zener diode", type: "zener_regulator", targets: { Vin: 18, Vz: 6.2 }, difficulty: "medium", style: "canonical" },
+
+  // rc_oscillator
+  { id: "osc5", prompt: "wien bridge oscillator 2 kHz", type: "rc_oscillator", targets: { f: 2000 }, difficulty: "easy", style: "canonical" },
+  { id: "osc6", prompt: "build a 1 kHz tone generator", type: "rc_oscillator", targets: { f: 1000 }, difficulty: "hard", style: "colloquial" },
+  { id: "osc7", prompt: "RC phase shift oscillator at 800 Hz", type: "rc_oscillator", targets: { f: 800 }, difficulty: "medium", style: "canonical" },
+  { id: "osc8", prompt: "oscillator producing 3.3 kHz", type: "rc_oscillator", targets: { f: 3300 }, difficulty: "medium", style: "canonical" },
+
+  // ── expansion set (v3) ──────────────────────────────────────────────────────
+  // Pushes the dataset past 100 cases; weighted toward colloquial/hard prompts
+  // where the regex fast path degrades and the LLM keeps its edge.
+  { id: "lp13", prompt: "kill anything above 12 kHz before the ADC", type: "rc_lowpass", targets: { fc: 12000 }, difficulty: "hard", style: "colloquial" },
+  { id: "lp14", prompt: "gentle low pass, corner at 1.2kHz", type: "rc_lowpass", targets: { fc: 1200 }, difficulty: "medium", style: "unit-variant" },
+  { id: "hp11", prompt: "strip out anything slower than 15 Hz", type: "rc_highpass", targets: { fc: 15 }, difficulty: "hard", style: "colloquial" },
+  { id: "hp12", prompt: "high pass filter with cutoff 3.3 kHz", type: "rc_highpass", targets: { fc: 3300 }, difficulty: "easy", style: "canonical" },
+  { id: "vd13", prompt: "drop a 3.7V li-ion down to 1.8V for logic", type: "voltage_divider", targets: { Vin: 3.7, Vout: 1.8 }, difficulty: "hard", style: "colloquial" },
+  { id: "led11", prompt: "put an LED across 6V pulling 12mA", type: "led_limiter", targets: { Vsupply: 6, I: 0.012 }, difficulty: "medium", style: "colloquial" },
+  { id: "ce9", prompt: "boost a mic signal 60x with one transistor", type: "common_emitter", targets: { Av: 60 }, difficulty: "hard", style: "colloquial" },
+  { id: "inv9", prompt: "inverting amplifier, gain 8", type: "opamp_inverting", targets: { Av: 8 }, difficulty: "easy", style: "canonical" },
+  { id: "ninv9", prompt: "scale a sensor output up 6x, don't invert it", type: "opamp_noninverting", targets: { Av: 6 }, difficulty: "hard", style: "colloquial" },
+  { id: "bp9", prompt: "keep only the 400 Hz to 6 kHz band", type: "band_pass", targets: { fL: 400, fH: 6000 }, difficulty: "hard", style: "colloquial" },
+  { id: "zn8", prompt: "hold a 20V supply at 9.1V with a zener", type: "zener_regulator", targets: { Vin: 20, Vz: 9.1 }, difficulty: "medium", style: "colloquial" },
+  { id: "osc9", prompt: "put out a steady 1.5 kHz tone", type: "rc_oscillator", targets: { f: 1500 }, difficulty: "hard", style: "colloquial" },
+
+  // A few genuinely ambiguous cases: capable LLM makes a reasonable call but may
+  // not match the label. `llm` gives the structured output a strong LLM returns.
+  { id: "amb1", prompt: "amplifier gain 50", type: "common_emitter", targets: { Av: 50 }, difficulty: "hard", style: "ambiguous", llm: { type: "opamp_noninverting", targets: { Av: 50 }, confidence: 0.55 } },
+  { id: "amb2", prompt: "make it 3 times louder", type: "opamp_noninverting", targets: { Av: 3 }, difficulty: "hard", style: "ambiguous", llm: { type: "opamp_noninverting", targets: { Av: 3 }, confidence: 0.5 } },
+  { id: "amb3", prompt: "a filter around 1 kHz", type: "band_pass", targets: { fL: 316, fH: 3162 }, difficulty: "hard", style: "ambiguous", llm: { type: "rc_lowpass", targets: { fc: 1000 }, confidence: 0.5 } },
 ];
 
 /** Group the dataset by expected type. */
