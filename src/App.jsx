@@ -11,6 +11,7 @@ import { parsePrompt } from "./utils/circuitParser";
 import { makeSpec, SUPPORTED_TYPES } from "./spec/circuitSpec";
 import { recalculateFromComponents, formatResistance, formatCapacitance } from "./utils/circuitFormulas";
 import { designAndVerify } from "./design/loop";
+import { llmReasoningProposer } from "./agents/reasoningAgent";
 import { runSpice } from "./sim/spice";
 import { parseWithLLM } from "./parse/llmParser";
 import { buildBOM } from "./design/bom";
@@ -21,6 +22,7 @@ if (process.env.NODE_ENV === "development") {
   import("./eval/yieldBenchmark");
   import("./eval/parserBenchmark");
   import("./eval/designBenchmark");
+  import("./eval/reasoningLoop");
 }
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
@@ -128,6 +130,7 @@ export default function App() {
   const [specSource, setSpecSource] = useState("fast");   // "fast" | "llm" | "manual"
   const [specLowConf, setSpecLowConf] = useState(false);  // low-confidence regex fallback
   const [resolving, setResolving] = useState(false);      // LLM call in flight
+  const [llmInLoop, setLlmInLoop] = useState(false);      // AI-in-the-loop refinement
 
   const [activeTab,          setActiveTab]          = useState("schematic");
   const [expandComponents,   setExpandComponents]   = useState(true);
@@ -153,8 +156,11 @@ export default function App() {
     try {
       // Stream each agent's status into the running-state log.
       const live = [];
+      const useLlm = llmInLoop && !!process.env.REACT_APP_ANTHROPIC_KEY;
       res = await designAndVerify(spec, {
         runSpice,
+        strategy: "reasoning",
+        propose: useLlm ? llmReasoningProposer() : undefined,
         onStatus: (m) => { live.push(m); setLogSteps(live.slice(-3)); },
       });
     } catch (e) {
@@ -185,7 +191,7 @@ export default function App() {
     ]);
     setSelectedCircuit(merged);
     setLoading(false);
-  }, [loading]);
+  }, [loading, llmInLoop]);
 
   // Parser routing with graceful degradation, then always land on the confirm card:
   //   1. regex parsePrompt first (instant, offline)
@@ -357,6 +363,9 @@ export default function App() {
                 onChange={setPendingSpec}
                 onRun={handleRunSpec}
                 onCancel={handleCancelSpec}
+                llmInLoop={llmInLoop}
+                onLlmInLoopChange={setLlmInLoop}
+                hasKey={!!process.env.REACT_APP_ANTHROPIC_KEY}
               />
             )}
           </div>
@@ -770,7 +779,11 @@ function RefineTrace({ circuit }) {
   if (!v?.verifiable || !v.trace || v.trace.length === 0) return null;
 
   const comp = (circuit.components || []).find(c => c.ref === v.trace[0].ref);
-  const fmtVal = (val) => comp?.unit === "F" ? formatCapacitance(val) : comp?.unit === "Ω" ? formatResistance(val) : String(val);
+  const unitOf = (ref) => (circuit.components || []).find(c => c.ref === ref)?.unit;
+  const fmtVal = (val, ref) => {
+    const u = unitOf(ref) ?? comp?.unit;
+    return u === "F" ? formatCapacitance(val) : u === "Ω" ? formatResistance(val) : String(val);
+  };
   const bestIdx = v.trace.reduce((b, t, i) => (t.errorPct != null && (v.trace[b].errorPct == null || t.errorPct < v.trace[b].errorPct)) ? i : b, 0);
 
   const th = { textAlign: "left", padding: "8px 18px", fontSize: "var(--fs-xs)", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, borderBottom: "1px solid var(--border)" };
@@ -782,7 +795,7 @@ function RefineTrace({ circuit }) {
         onClick={() => setOpen(o => !o)}
         style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", background: "transparent", border: "none", cursor: "pointer", fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}
       >
-        <span>Refine search ({v.trace.length} tried, {comp ? comp.ref : "component"})</span>
+        <span>Reasoning loop ({v.trace.length} {v.trace.length === 1 ? "step" : "steps"}, propose → SPICE → re-propose)</span>
         <span style={{ color: "var(--text-3)", display: "inline-flex" }}><IconChevron dir={open ? "down" : "right"} /></span>
       </button>
       {open && (
@@ -790,9 +803,10 @@ function RefineTrace({ circuit }) {
           <thead>
             <tr>
               <th style={th}>Attempt</th>
-              <th style={th}>{comp ? comp.ref : "Value"}</th>
+              <th style={th}>Component</th>
               <th style={th}>Measured</th>
               <th style={th}>Error</th>
+              <th style={th}>Reasoning</th>
             </tr>
           </thead>
           <tbody>
@@ -801,11 +815,12 @@ function RefineTrace({ circuit }) {
               return (
                 <tr key={i} style={{ background: chosen ? "var(--success-soft)" : "transparent" }}>
                   <td className="tnum" style={{ ...td, color: "var(--text-2)" }}>{i + 1}</td>
-                  <td className="tnum" style={{ ...td, color: "var(--text)" }}>{fmtVal(t.value)}{chosen ? "  (chosen)" : ""}</td>
+                  <td className="tnum" style={{ ...td, color: "var(--text)" }}>{t.ref ? `${t.ref} ` : ""}{fmtVal(t.value, t.ref)}{chosen ? "  (chosen)" : ""}</td>
                   <td className="tnum" style={{ ...td, color: "var(--text)" }}>{fmtTarget(v.targetName, t.measured)}</td>
                   <td className="tnum" style={{ ...td, color: chosen ? "var(--success)" : "var(--text-2)", fontWeight: chosen ? 600 : 400 }}>
                     {t.errorPct == null ? "n/a" : `${(t.errorPct * 100).toFixed(1)}%`}
                   </td>
+                  <td style={{ ...td, color: "var(--text-3)", fontSize: "var(--fs-xs)", maxWidth: "260px" }}>{t.rationale || ""}</td>
                 </tr>
               );
             })}

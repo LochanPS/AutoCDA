@@ -120,6 +120,35 @@ describe("llmReasoningProposer (real-API path, mocked transport)", () => {
     ).rejects.toThrow(/no key/i);
   });
 
+  test("drives the closed loop to convergence when used as the agent's proposer", async () => {
+    // Start from a deliberately wrong Rf so the loop must call the (LLM) proposer.
+    const d = designerAgent({ type: "opamp_inverting", targets: { Av: 10 }, eSeries: "E24" });
+    const r1 = d.snapped.find((c) => c.ref === "R1").rawValue;
+    const badSnapped = d.snapped.map((c) => (c.ref === "Rf" ? { ...c, rawValue: r1 } : c)); // Av=1, way off
+    // Mock transport: the "model" reasons Rf = target * R1 from the prompt context.
+    const fetchImpl = async (url, opts) => {
+      const body = JSON.parse(opts.body);
+      const m = body.messages[0].content.match(/Design target[^\n]*:\s*([\d.]+)/);
+      const target = parseFloat(m[1]);
+      return {
+        ok: true,
+        json: async () => ({
+          content: [{ type: "tool_use", name: "propose_next_value", input: { value: target * r1, rationale: `Rf = Av*R1 = ${target}*${r1}` } }],
+        }),
+      };
+    };
+    const propose = llmReasoningProposer({ key: "test", fetchImpl });
+    const r = await reasoningAgent({
+      type: "opamp_inverting", targets: { Av: 10 }, snapped: badSnapped,
+      idealComponents: d.idealComponents, tolerance: 0.05, eSeries: "E24",
+      simulate: analyticSim("opamp_inverting", { Av: 10 }), propose,
+    });
+    expect(r.converged) .toBe(true);
+    expect(r.best.errorPct).toBeLessThanOrEqual(0.05);
+    // the LLM proposer's rationale is captured in the audit trace
+    expect(r.trace.some((s) => /Rf = Av\*R1/.test(s.rationale))).toBe(true);
+  });
+
   test("parses the tool_use block into { value, rationale }", async () => {
     const fetchImpl = async (url, opts) => {
       const body = JSON.parse(opts.body);

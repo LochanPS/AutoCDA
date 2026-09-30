@@ -129,8 +129,14 @@ async function searchOne({ type, targets, ref, series, base, tolerance, maxItera
   let best = null;
   let errors = [];
   let rationale = series === "E96" ? `fine trim: ${ref} on E96` : "start: E-series-snapped analytical value";
+  const tried = new Set();
 
   for (let i = 0; i < maxIterations; i++) {
+    // Cycle guard: if we are about to re-simulate a value already tried on this
+    // series, the search has converged to the E-series floor — stop wasting
+    // simulations and let the caller escalate (e.g. to the E96 trim phase).
+    if (tried.has(value)) break;
+    tried.add(value);
     const vals = { ...base, [ref]: value };
     if (onStatus) onStatus(`Reasoning step ${i + 1}/${maxIterations}: try ${ref}=${short(value)}`);
 
@@ -149,10 +155,24 @@ async function searchOne({ type, targets, ref, series, base, tolerance, maxItera
     }
     if (errorPct != null && errorPct <= tolerance) break;
 
-    const next = propose({ type, target, current: value, history, eSeries: series });
+    // `propose` may be async (the LLM proposer). Await it, and if it throws
+    // (network/parse error) fall back to the deterministic secant so the loop
+    // still converges instead of failing the whole design.
+    const ctx = { type, target, current: value, history, eSeries: series };
+    let next;
+    try {
+      next = await propose(ctx);
+    } catch (e) {
+      next = secantProposer(ctx);
+      next.rationale = `proposer error, fell back to secant (${e.message})`;
+    }
+    if (!next || !finite(next.value)) next = secantProposer(ctx);
+    // Enforce a buyable part: whatever the proposer returns is snapped to the
+    // active E-series before it is simulated.
+    const proposed = snap(next.value, series);
     // Stall guard: if the proposal repeats the current value, nudge one E-series
     // step in the direction the error demands, else stop (no better move exists).
-    if (next.value === value) {
+    if (proposed === value) {
       const sign = MONO[type] ?? -1;
       const wantUp = errorPct != null && (measured < target ? sign > 0 : sign < 0);
       const nb = neighbors(value, series, 1);
@@ -161,7 +181,7 @@ async function searchOne({ type, targets, ref, series, base, tolerance, maxItera
       value = nudged;
       rationale = "stall guard: single E-series step toward target";
     } else {
-      value = next.value;
+      value = proposed;
       rationale = next.rationale;
     }
   }

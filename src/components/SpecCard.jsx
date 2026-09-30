@@ -76,7 +76,7 @@ function SourceChip({ source }) {
  * @param {() => void}     props.onRun
  * @param {() => void}     props.onCancel
  */
-export default function SpecCard({ spec, onChange, onRun, onCancel, source = "fast", lowConfidence = false }) {
+export default function SpecCard({ spec, onChange, onRun, onCancel, source = "fast", lowConfidence = false, llmInLoop = false, onLlmInLoopChange, hasKey = false }) {
   if (!spec) return null;
 
   const typeDef = SUPPORTED_TYPES.find((t) => t.id === spec.type);
@@ -175,6 +175,34 @@ export default function SpecCard({ spec, onChange, onRun, onCancel, source = "fa
           ))}
         </div>
       )}
+
+      <label
+        title={hasKey ? "Let Claude choose each next component value from the live SPICE measurement, in a closed loop." : "Set REACT_APP_ANTHROPIC_KEY to enable. Without a key, a deterministic solver drives the same loop."}
+        style={{
+          display: "flex", alignItems: "flex-start", gap: "9px", cursor: hasKey ? "pointer" : "not-allowed",
+          background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)",
+          padding: "10px 12px", opacity: hasKey ? 1 : 0.6,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={llmInLoop && hasKey}
+          disabled={!hasKey}
+          onChange={(e) => onLlmInLoopChange && onLlmInLoopChange(e.target.checked)}
+          style={{ marginTop: "2px", cursor: hasKey ? "pointer" : "not-allowed", accentColor: "var(--accent)" }}
+        />
+        <span style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "var(--fs-xs)", fontWeight: 600, color: "var(--text)" }}>
+            <span style={{ display: "inline-flex", color: "var(--accent)" }}><SparkIcon /></span>
+            AI in the loop
+          </span>
+          <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-2)", lineHeight: 1.4 }}>
+            {hasKey
+              ? "Claude proposes each next part value from the live SPICE result."
+              : "Needs REACT_APP_ANTHROPIC_KEY. Off = deterministic solver runs the same loop."}
+          </span>
+        </span>
+      </label>
 
       {!ok && errors.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
