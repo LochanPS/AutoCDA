@@ -50,4 +50,12 @@ describe("circuitParser — number & format robustness", () => {
     expect(parsePrompt("inverting amplifier gain 10").type).toBe("opamp_inverting");
     expect(parsePrompt("non-inverting amplifier gain 11").type).toBe("opamp_noninverting");
   });
+
+  test("Sallen-Key / 2nd-order routes ahead of the plain low-pass", () => {
+    expect(parsePrompt("sallen-key low pass 1kHz").type).toBe("sallen_key_lowpass");
+    expect(parsePrompt("second order low pass filter at 2 kHz").type).toBe("sallen_key_lowpass");
+    expect(parsePrompt("two-pole low pass, cutoff 1.5 kHz").type).toBe("sallen_key_lowpass");
+    // a plain low-pass is still the first-order RC
+    expect(parsePrompt("low pass filter 1kHz").type).toBe("rc_lowpass");
+  });
 });

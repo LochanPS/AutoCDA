@@ -37,6 +37,7 @@ export const SUPPORTED_TYPES = [
   { id: 'opamp_noninverting', name: 'Non-Inverting Op-Amp', fields: ['Av'] },
   { id: 'zener_regulator', name: 'Zener Voltage Regulator', fields: ['Vin', 'Vz'] },
   { id: 'rc_oscillator', name: 'RC Oscillator', fields: ['f'] },
+  { id: 'sallen_key_lowpass', name: 'Sallen-Key Low-Pass (2nd order)', fields: ['fc'] },
 ];
 
 /** Default constraint values applied when a partial spec omits them. */

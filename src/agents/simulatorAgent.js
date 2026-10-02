@@ -124,6 +124,16 @@ const SIM = {
     },
     measure: (r) => measureDC(r, "out"),
   },
+  sallen_key_lowpass: {
+    targetName: "fc",
+    target: (t) => t.fc,
+    dominant: "R1",
+    // Unity-gain Sallen-Key low-pass (ideal op-amp as a VCVS buffer). 2nd order,
+    // four coupled passives; no single-component closed form, so the loop refines.
+    build: (v, t) =>
+      `* sallen-key low-pass (unity gain)\nV1 in 0 AC 1\nR1 in a ${num(v.R1)}\nR2 a b ${num(v.R2)}\nC2 b 0 ${num(v.C2)}\nC1 a out ${num(v.C1)}\nE1 out 0 b 0 1\n.ac dec 100 ${num(t.fc / 100)} ${num(t.fc * 100)}\n.end`,
+    measure: (r) => measureCutoff(r, "out"),
+  },
   rc_oscillator: {
     targetName: "f",
     target: (t) => t.f,

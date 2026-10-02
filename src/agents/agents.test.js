@@ -22,6 +22,16 @@ describe("designerAgent", () => {
   test("unknown type fails cleanly", () => {
     expect(designerAgent({ type: "nope", targets: {} }).ok).toBe(false);
   });
+
+  test("designs a Sallen-Key low-pass with 4 snapped passives (R1=R2, C1=2*C2)", () => {
+    const out = designerAgent({ type: "sallen_key_lowpass", targets: { fc: 1000 }, eSeries: "E24" });
+    expect(out.ok).toBe(true);
+    const refs = out.snapped.map((c) => c.ref).sort();
+    expect(refs).toEqual(["C1", "C2", "R1", "R2"]);
+    const C1 = out.idealComponents.find((c) => c.ref === "C1").rawValue;
+    const C2 = out.idealComponents.find((c) => c.ref === "C2").rawValue;
+    expect(C1 / C2).toBeCloseTo(2, 6); // Butterworth Q=0.707
+  });
 });
 
 describe("simulatorAgent primitives (pure)", () => {
@@ -55,7 +65,7 @@ describe("simulatorAgent primitives (pure)", () => {
   });
 
   test("descriptor exists for each of the 10 supported types", () => {
-    const ids = ["rc_lowpass","rc_highpass","voltage_divider","led_limiter","common_emitter","band_pass","opamp_inverting","opamp_noninverting","zener_regulator","rc_oscillator"];
+    const ids = ["rc_lowpass","rc_highpass","voltage_divider","led_limiter","common_emitter","band_pass","opamp_inverting","opamp_noninverting","zener_regulator","rc_oscillator","sallen_key_lowpass"];
     for (const id of ids) expect(simDescriptor(id)).toBeDefined();
   });
 });

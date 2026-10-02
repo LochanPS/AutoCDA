@@ -89,6 +89,19 @@ function formatValue(field, v) {
 // `fields` = required target keys; `defaults` = fallback value per field.
 
 const CIRCUIT_PATTERNS = [
+  // Sallen-Key / 2nd-order low-pass MUST precede rc_lowpass: "sallen-key lowpass"
+  // contains the substring "lowpass", so rc_lowpass would otherwise win.
+  {
+    id: 'sallen_key_lowpass',
+    keywords: ['sallen', 'sallen-key', 'sallen key', 'second order low', 'second-order low',
+               '2nd order low', '2nd-order low', 'two pole low', 'two-pole low', 'butterworth low'],
+    fields: ['fc'],
+    extract: (text) => {
+      const fc = extractFrequency(text);
+      return fc ? { fc } : {};
+    },
+    defaults: { fc: 1000 },
+  },
   {
     id: 'rc_lowpass',
     keywords: ['low pass', 'low-pass', 'lowpass', 'lp filter', 'lp '],

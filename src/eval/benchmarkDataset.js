@@ -167,6 +167,14 @@ export const DATASET = [
   { id: "zn8", prompt: "hold a 20V supply at 9.1V with a zener", type: "zener_regulator", targets: { Vin: 20, Vz: 9.1 }, difficulty: "medium", style: "colloquial" },
   { id: "osc9", prompt: "put out a steady 1.5 kHz tone", type: "rc_oscillator", targets: { f: 1500 }, difficulty: "hard", style: "colloquial" },
 
+  // ── sallen_key_lowpass (2nd-order; no single-component closed form) ──────────
+  { id: "sk1", prompt: "sallen-key low pass 1kHz", type: "sallen_key_lowpass", targets: { fc: 1000 }, difficulty: "easy", style: "canonical" },
+  { id: "sk2", prompt: "second order low pass filter at 2 kHz", type: "sallen_key_lowpass", targets: { fc: 2000 }, difficulty: "medium", style: "canonical" },
+  { id: "sk3", prompt: "2nd order lowpass 500Hz", type: "sallen_key_lowpass", targets: { fc: 500 }, difficulty: "medium", style: "unit-variant" },
+  { id: "sk4", prompt: "butterworth low pass 3.3kHz", type: "sallen_key_lowpass", targets: { fc: 3300 }, difficulty: "medium", style: "canonical" },
+  { id: "sk5", prompt: "two-pole low pass, cutoff 1.5 kHz", type: "sallen_key_lowpass", targets: { fc: 1500 }, difficulty: "hard", style: "colloquial" },
+  { id: "sk6", prompt: "sallen key filter 800 Hz", type: "sallen_key_lowpass", targets: { fc: 800 }, difficulty: "easy", style: "canonical" },
+
   // A few genuinely ambiguous cases: capable LLM makes a reasonable call but may
   // not match the label. `llm` gives the structured output a strong LLM returns.
   { id: "amb1", prompt: "amplifier gain 50", type: "common_emitter", targets: { Av: 50 }, difficulty: "hard", style: "ambiguous", llm: { type: "opamp_noninverting", targets: { Av: 50 }, confidence: 0.55 } },

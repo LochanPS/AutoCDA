@@ -435,6 +435,41 @@ function rcOscillator({ f = 1000, R = 10000 }) {
   };
 }
 
+function sallenKeyLowpass({ fc = 1000 }) {
+  // Unity-gain, equal-R Sallen-Key low-pass, Butterworth (Q = 1/sqrt2).
+  // For R1=R2=R:  Q = 0.5*sqrt(C1/C2),  fc = 1/(2*pi*R*sqrt(C1*C2)).
+  // Butterworth => C1/C2 = 2. Pick C2, set C1 = 2*C2, solve R.
+  const C2 = 10e-9;
+  const C1 = 2 * C2;
+  const R = 1 / (2 * Math.PI * fc * Math.sqrt(C1 * C2));
+  const fcActual = 1 / (2 * Math.PI * R * Math.sqrt(C1 * C2));
+  return {
+    id: 'sallen_key_lowpass',
+    name: 'Sallen-Key Low-Pass (2nd order)',
+    schematic: '/schematics/sallen_key_lowpass.svg',
+    simulationBadge: analyticalBadge(`fc = ${formatFrequency(fcActual)}`),
+    components: [
+      { ref: 'R1', rawValue: R,  unit: 'Ω', display: formatResistance(R),  description: 'Input Resistor',  editable: true },
+      { ref: 'R2', rawValue: R,  unit: 'Ω', display: formatResistance(R),  description: 'Second Resistor', editable: true },
+      { ref: 'C1', rawValue: C1, unit: 'F', display: formatCapacitance(C1), description: 'Feedback Cap',    editable: true },
+      { ref: 'C2', rawValue: C2, unit: 'F', display: formatCapacitance(C2), description: 'Shunt Cap',       editable: true },
+    ],
+    derivedParams: { fc: fcActual, Q: 0.707, order: 2 },
+    graph: { type: 'bode', title: `Frequency Response — Sallen-Key Low-Pass (fc = ${formatFrequency(fcActual)}, 2nd order)`, xLabel: 'Frequency (Hz)', yLabel: 'Gain (dB)', cutoffFrequency: fcActual, filterType: 'lowpass' },
+    processingSteps: [
+      '[✓] Input received: Sallen-Key Low-Pass Filter',
+      `[✓] Target cutoff: ${formatFrequency(fc)}`,
+      '[✓] Topology: 2nd-order unity-gain Sallen-Key (Butterworth)',
+      '[✓] Formula: fc = 1/(2π·R·√(C1·C2)), Q = 0.5·√(C1/C2)',
+      `[✓] C2 = ${formatCapacitance(C2)}, C1 = ${formatCapacitance(C1)} (C1/C2 = 2 → Q = 0.707)`,
+      `[✓] R1 = R2 = ${formatResistance(R)}`,
+      ...analyticalSteps(`fc = ${formatFrequency(fcActual)} (−40 dB/decade)`),
+    ],
+    explanation: `Second-order unity-gain Sallen-Key low-pass. With R1 = R2 = ${formatResistance(R)}, C1 = ${formatCapacitance(C1)}, C2 = ${formatCapacitance(C2)} (C1/C2 = 2) the response is Butterworth (Q = 0.707) with cutoff ${formatFrequency(fcActual)} and a −40 dB/decade roll-off. Four coupled components set fc and Q jointly — there is no single-component closed form, so the design is finished by SPICE-graded refinement.`,
+    netlist: `Sallen-Key Low-Pass — SPICE Netlist\n*AutoCDA Generated\nV1 in 0 AC 1\nR1 in a ${formatResistance(R)}\nR2 a b ${formatResistance(R)}\nC2 b 0 ${formatCapacitance(C2)}\nC1 a out ${formatCapacitance(C1)}\nE1 out 0 b 0 1\n.ac dec 100 ${(fcActual/100).toPrecision(4)} ${(fcActual*100).toPrecision(4)}\n.end`,
+  };
+}
+
 // ── main export ──────────────────────────────────────────────────────────────
 
 export function calculateCircuit(circuitId, params) {
@@ -450,6 +485,7 @@ export function calculateCircuit(circuitId, params) {
     case 'opamp_noninverting':  return opampNoninverting(params);
     case 'zener_regulator':     return zenerRegulator(params);
     case 'rc_oscillator':       return rcOscillator(params);
+    case 'sallen_key_lowpass':  return sallenKeyLowpass(params);
     default: return null;
   }
 }

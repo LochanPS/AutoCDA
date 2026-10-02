@@ -254,6 +254,44 @@ const FALLBACK_SVGS = {
   <line x1="300" y1="185" x2="300" y2="166" class="wire"/>
 </svg>`,
 
+  sallen_key_lowpass: `<svg viewBox="0 0 440 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
+  <!-- Vin -> R1 -> node a -> R2 -> node b(+) ; C2 b->gnd ; C1 a->out ; buffer -->
+  <text x="18" y="84" class="lbl" fill="#2f6feb">Vin</text>
+  <line x1="34" y1="80" x2="60" y2="80" class="wire"/>
+  <polyline points="60,80 68,80 72,66 80,94 88,66 96,94 104,66 112,94 120,80 132,80" class="sym"/>
+  <text x="96" y="58" text-anchor="middle" class="lbl">{{R1}}</text>
+  <circle cx="150" cy="80" r="3" fill="#2f6feb"/>
+  <polyline points="150,80 158,80 162,66 170,94 178,66 186,94 194,66 202,94 210,80 222,80" class="sym"/>
+  <text x="186" y="58" text-anchor="middle" class="lbl">{{R2}}</text>
+  <circle cx="240" cy="80" r="3" fill="#2f6feb"/>
+  <!-- C2 from node b to ground -->
+  <line x1="240" y1="80" x2="240" y2="120" class="wire"/>
+  <line x1="226" y1="120" x2="254" y2="120" class="sym" stroke-width="3"/>
+  <line x1="226" y1="130" x2="254" y2="130" class="sym" stroke-width="3"/>
+  <text x="262" y="128" class="lbl">{{C2}}</text>
+  <line x1="240" y1="130" x2="240" y2="165" class="wire"/>
+  <line x1="228" y1="165" x2="252" y2="165" class="wire"/><line x1="233" y1="172" x2="247" y2="172" class="wire"/>
+  <!-- op-amp unity buffer -->
+  <polygon points="270,55 270,105 320,80" class="sym"/>
+  <text x="300" y="84" text-anchor="middle" class="lbl">U1</text>
+  <line x1="240" y1="80" x2="270" y2="80" class="wire"/>
+  <line x1="320" y1="80" x2="400" y2="80" class="wire"/>
+  <circle cx="375" cy="80" r="4" fill="#1a7f42"/>
+  <text x="382" y="76" class="lbl" fill="#1a7f42">Vout</text>
+  <!-- C1 feedback from node a to output -->
+  <line x1="150" y1="80" x2="150" y2="30" class="wire"/>
+  <line x1="150" y1="30" x2="340" y2="30" class="wire"/>
+  <line x1="150" y1="18" x2="150" y2="42" class="sym" stroke-width="3"/><!-- placeholder -->
+  <line x1="320" y1="18" x2="320" y2="42" class="sym" stroke-width="0"/>
+  <line x1="332" y1="20" x2="332" y2="40" class="sym" stroke-width="3"/>
+  <line x1="344" y1="20" x2="344" y2="40" class="sym" stroke-width="3"/>
+  <text x="300" y="16" text-anchor="middle" class="lbl">{{C1}}</text>
+  <line x1="344" y1="30" x2="340" y2="30" class="wire"/>
+  <line x1="340" y1="30" x2="340" y2="80" class="wire"/>
+  <text x="60" y="200" class="lbl" fill="#8b95a3">2nd-order Butterworth (Q=0.707)</text>
+</svg>`,
+
   opamp_inverting: `<svg viewBox="0 0 420 240" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
   <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
   <!-- Vin through input resistor R1 to inverting input -->
