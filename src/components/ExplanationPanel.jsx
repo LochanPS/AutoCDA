@@ -3,12 +3,12 @@ import { generateKicadSch } from "../utils/kicadExport";
 import { getCircuitJSUrl } from "../utils/circuitjs";
 import { downloadEasyEDAJson } from "../utils/easyedaschema";
 import { buildBOM, buildBOMPriced, buildBomCsv } from "../design/bom";
-import { cached, makeMouserPriceSource } from "../design/distributorPricing";
+import { cached, makeMarketplaceSource } from "../design/distributorPricing";
 
-// Live pricing source, built once if a proxy URL is configured (non-secret URL;
-// the distributor key lives only in that proxy). Falls back to the static catalog.
+// Multi-distributor marketplace source, built once if a proxy URL is configured
+// (non-secret URL; distributor keys live only in that proxy). Static fallback.
 const PRICING_PROXY = process.env.REACT_APP_PRICING_PROXY;
-const PRICE_SOURCE = PRICING_PROXY ? cached(makeMouserPriceSource({ baseUrl: PRICING_PROXY })) : null;
+const PRICE_SOURCE = PRICING_PROXY ? cached(makeMarketplaceSource({ baseUrl: PRICING_PROXY })) : null;
 
 export default function ExplanationPanel({ circuit, visible, expanded, onToggle }) {
   const downloadFile = (content, filename, mime) => {

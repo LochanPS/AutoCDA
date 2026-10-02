@@ -15,12 +15,12 @@ import { llmReasoningProposer } from "./agents/reasoningAgent";
 import { runSpice } from "./sim/spice";
 import { parseWithLLM } from "./parse/llmParser";
 import { buildBOM, buildBOMPriced } from "./design/bom";
-import { cached, makeMouserPriceSource } from "./design/distributorPricing";
+import { cached, makeMarketplaceSource } from "./design/distributorPricing";
 
-// Live pricing source (built once) when a proxy URL is configured; else null ->
-// the static catalog is used. The URL is non-secret; the key lives in the proxy.
+// Multi-distributor marketplace source (built once) when a proxy URL is set; else
+// null -> static catalog. The URL is non-secret; distributor keys live in the proxy.
 const BOM_PRICE_SOURCE = process.env.REACT_APP_PRICING_PROXY
-  ? cached(makeMouserPriceSource({ baseUrl: process.env.REACT_APP_PRICING_PROXY }))
+  ? cached(makeMarketplaceSource({ baseUrl: process.env.REACT_APP_PRICING_PROXY }))
   : null;
 import { runToleranceSweep } from "./design/montecarlo";
 
@@ -763,6 +763,10 @@ function BomPanel({ circuit }) {
 
   if (!bom.rows.length) return null;
   const anyPriced = bom.rows.some((r) => r.priced);
+  const sites = new Set();
+  bom.rows.forEach((r) => { if (r.priced) { sites.add(r.priceSource); (r.offers || []).forEach((o) => sites.add(o.source)); } });
+  const nSites = sites.size;
+  const offerStr = (r) => (r.offers || []).map((o) => `${o.source} $${Number(o.unitPrice).toFixed(3)}`).join("  ·  ");
 
   const th = { textAlign: "left", padding: "8px 18px", fontSize: "var(--fs-xs)", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, borderBottom: "1px solid var(--border)" };
   const thR = { ...th, textAlign: "right" };
@@ -781,7 +785,7 @@ function BomPanel({ circuit }) {
             fontSize: "var(--fs-xs)", fontWeight: 600, padding: "2px 8px", borderRadius: "999px",
             background: pricing === "live" ? "var(--success-soft)" : "var(--surface-2)",
             color: pricing === "live" ? "var(--success)" : "var(--text-3)",
-          }}>{pricing === "live" ? "Mouser live" : pricing === "loading" ? "pricing…" : "catalog"}</span>
+          }}>{pricing === "live" ? (nSites > 1 ? `best of ${nSites} sites` : "live prices") : pricing === "loading" ? "comparing…" : "catalog"}</span>
           <span className="tnum" style={{ fontSize: "var(--fs-sm)", color: "var(--text-2)", fontWeight: 600 }}>${bom.total.toFixed(2)} / unit</span>
           <span style={{ color: "var(--text-3)", display: "inline-flex" }}><IconChevron dir={open ? "down" : "right"} /></span>
         </span>
@@ -796,6 +800,7 @@ function BomPanel({ circuit }) {
               <th style={thR}>Qty</th>
               <th style={thR}>Unit</th>
               <th style={thR}>Line</th>
+              {anyPriced && <th style={th}>From</th>}
               {anyPriced && <th style={thR}>Stock</th>}
             </tr>
           </thead>
@@ -808,7 +813,14 @@ function BomPanel({ circuit }) {
                 <td className="tnum" style={tdR}>{r.qty}</td>
                 <td className="tnum" style={{ ...tdR, color: r.priced ? "var(--success)" : undefined }}>${r.unitPrice.toFixed(3)}</td>
                 <td className="tnum" style={{ ...tdR, color: "var(--text)", fontWeight: 500 }}>${r.lineTotal.toFixed(3)}</td>
-                {anyPriced && <td className="tnum" style={{ ...tdR, color: "var(--text-3)", fontSize: "var(--fs-xs)" }}>{r.priced && r.stock != null ? r.stock.toLocaleString() : r.priced ? "—" : "catalog"}</td>}
+                {anyPriced && (
+                  <td style={{ ...td, fontSize: "var(--fs-xs)", color: "var(--text-2)" }} title={r.priced ? offerStr(r) : "bundled catalog price"}>
+                    {r.priced
+                      ? (<span><span style={{ fontWeight: 600, color: "var(--success)" }}>{r.priceSource}</span>{r.offers && r.offers.length > 1 ? <span style={{ color: "var(--text-3)" }}> +{r.offers.length - 1}</span> : null}</span>)
+                      : <span style={{ color: "var(--text-3)" }}>catalog</span>}
+                  </td>
+                )}
+                {anyPriced && <td className="tnum" style={{ ...tdR, color: "var(--text-3)", fontSize: "var(--fs-xs)" }}>{r.priced && r.stock != null ? r.stock.toLocaleString() : r.priced ? "—" : "—"}</td>}
               </tr>
             ))}
             <tr>
@@ -816,6 +828,7 @@ function BomPanel({ circuit }) {
                 <span style={{ fontWeight: 600 }}>Total per unit</span>
               </td>
               <td className="tnum" style={{ ...tdR, borderBottom: "none", color: "var(--text)", fontWeight: 700 }}>${bom.total.toFixed(3)}</td>
+              {anyPriced && <td style={{ ...td, borderBottom: "none", fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>{nSites > 1 ? "best per part" : ""}</td>}
               {anyPriced && <td style={{ ...td, borderBottom: "none" }} />}
             </tr>
           </tbody>

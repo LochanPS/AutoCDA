@@ -67,6 +67,32 @@ export function makeMouserPriceSource({ baseUrl, fetchImpl } = {}) {
 }
 
 /**
+ * Marketplace source: reads the multi-distributor proxy, which returns ALL
+ * offers for a part plus the cheapest. The returned quote is the BEST offer, with
+ * every distributor's offer attached as `offers` so the BOM can show the spread.
+ * The proxy contract: GET {baseUrl}?mpn=... -> { best:{source,unitPrice,stock,
+ * currency,link}, offers:[...], count }.
+ */
+export function makeMarketplaceSource({ baseUrl, fetchImpl } = {}) {
+  const doFetch = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  return async (mpn) => {
+    if (!baseUrl || !doFetch) return null;
+    const res = await doFetch(`${baseUrl}?mpn=${encodeURIComponent(mpn)}`, { headers: { accept: "application/json" } });
+    if (!res.ok) return null;
+    const d = await res.json();
+    if (!d || !d.best || typeof d.best.unitPrice !== "number") return null;
+    return {
+      unitPrice: d.best.unitPrice,
+      currency: d.best.currency || "USD",
+      stock: d.best.stock ?? null,
+      source: d.best.source,
+      link: d.best.link || null,
+      offers: Array.isArray(d.offers) ? d.offers : [],
+    };
+  };
+}
+
+/**
  * Enrich a static BOM (from buildBOM) with live prices. For each row, look up its
  * MPN; if a quote is found, replace the unit price and line total, else keep the
  * static values. Returns a NEW bom object with an added `priced` flag per row,
@@ -86,6 +112,8 @@ export async function enrichBOMWithPricing(bom, source) {
         lineTotal: +(q.unitPrice * r.qty).toFixed(4),
         stock: q.stock ?? null,
         priceSource: q.source,
+        offers: Array.isArray(q.offers) ? q.offers : undefined,
+        link: q.link || undefined,
         priced: true,
       };
     })

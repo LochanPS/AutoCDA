@@ -1,4 +1,4 @@
-import { cached, tablePriceSource, makeDigikeyPriceSource, enrichBOMWithPricing } from "./distributorPricing";
+import { cached, tablePriceSource, makeDigikeyPriceSource, makeMarketplaceSource, enrichBOMWithPricing } from "./distributorPricing";
 import { buildBOM, buildBOMPriced } from "./bom";
 
 const COMPONENTS = [
@@ -46,6 +46,38 @@ describe("distributorPricing", () => {
     const fetchImpl = async (url) => ({ ok: true, json: async () => ({ unitPrice: 0.12, currency: "USD", stock: 500 }) });
     const src = makeDigikeyPriceSource({ baseUrl: "/api/pricing", fetchImpl });
     expect(await src("MPN")).toMatchObject({ unitPrice: 0.12, stock: 500, source: "digikey" });
+  });
+
+  test("makeMarketplaceSource returns the cheapest offer and keeps the spread", async () => {
+    const fetchImpl = async () => ({
+      ok: true,
+      json: async () => ({
+        mpn: "X", count: 2,
+        best: { source: "mouser", unitPrice: 0.011, currency: "USD", stock: 5000 },
+        offers: [
+          { source: "mouser", unitPrice: 0.011, stock: 5000 },
+          { source: "digikey", unitPrice: 0.014, stock: 20000 },
+        ],
+      }),
+    });
+    const src = makeMarketplaceSource({ baseUrl: "/api/pricing", fetchImpl });
+    const q = await src("X");
+    expect(q.source).toBe("mouser");
+    expect(q.unitPrice).toBe(0.011);
+    expect(q.offers).toHaveLength(2);
+    expect(await makeMarketplaceSource({})("X")).toBeNull(); // inert without a proxy
+  });
+
+  test("enrichBOMWithPricing carries the marketplace offers onto the row", async () => {
+    const bom = buildBOM(COMPONENTS);
+    const mpn = bom.rows[0].mpn;
+    const src = async (m) => (m === mpn
+      ? { unitPrice: 0.01, currency: "USD", stock: 100, source: "digikey", offers: [{ source: "digikey", unitPrice: 0.01 }, { source: "mouser", unitPrice: 0.02 }] }
+      : null);
+    const priced = await enrichBOMWithPricing(bom, src);
+    const row = priced.rows[0];
+    expect(row.priceSource).toBe("digikey");
+    expect(row.offers).toHaveLength(2);
   });
 
   test("buildBOMPriced with no source equals the static BOM", async () => {
