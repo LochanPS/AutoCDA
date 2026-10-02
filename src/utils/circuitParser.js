@@ -91,6 +91,23 @@ function formatValue(field, v) {
 const CIRCUIT_PATTERNS = [
   // Sallen-Key / 2nd-order low-pass MUST precede rc_lowpass: "sallen-key lowpass"
   // contains the substring "lowpass", so rc_lowpass would otherwise win.
+  // 4th-order MUST precede the plain low-pass ("fourth order low pass" contains
+  // "low pass").
+  {
+    id: 'fourth_order_lowpass',
+    keywords: ['4th order', 'fourth order', '4th-order', 'fourth-order', '4 pole', 'four pole',
+               '4-pole', 'four-pole', '4th order low', 'fourth order low'],
+    fields: ['fc'],
+    extract: (text) => { const fc = extractFrequency(text); return fc ? { fc } : {}; },
+    defaults: { fc: 1000 },
+  },
+  {
+    id: 'current_source',
+    keywords: ['current source', 'constant current', 'current sink'],
+    fields: ['I'],
+    extract: (text) => { const I = extractCurrent(text); return I ? { I } : {}; },
+    defaults: { I: 0.01 },
+  },
   {
     id: 'sallen_key_highpass',
     keywords: ['sallen-key high', 'sallen key high', 'second order high', 'second-order high',

@@ -202,6 +202,14 @@ const CURATED = [
   { id: "der1", prompt: "op-amp differentiator 2kHz", type: "rc_differentiator", targets: { fc: 2000 }, difficulty: "easy", style: "canonical" },
   { id: "der2", prompt: "differentiator 1kHz", type: "rc_differentiator", targets: { fc: 1000 }, difficulty: "medium", style: "canonical" },
 
+  // ── fourth_order_lowpass + current_source ───────────────────────────────────
+  { id: "fo1", prompt: "4th order low pass 1kHz", type: "fourth_order_lowpass", targets: { fc: 1000 }, difficulty: "medium", style: "canonical" },
+  { id: "fo2", prompt: "fourth order butterworth low pass 2kHz", type: "fourth_order_lowpass", targets: { fc: 2000 }, difficulty: "medium", style: "canonical" },
+  { id: "fo3", prompt: "4-pole low pass at 500 Hz", type: "fourth_order_lowpass", targets: { fc: 500 }, difficulty: "hard", style: "colloquial" },
+  { id: "cs1", prompt: "constant current source 10mA", type: "current_source", targets: { I: 0.01 }, difficulty: "easy", style: "canonical" },
+  { id: "cs2", prompt: "current source 5mA", type: "current_source", targets: { I: 0.005 }, difficulty: "medium", style: "canonical" },
+  { id: "cs3", prompt: "20mA current sink", type: "current_source", targets: { I: 0.02 }, difficulty: "hard", style: "colloquial" },
+
   // A few genuinely ambiguous cases: capable LLM makes a reasonable call but may
   // not match the label. `llm` gives the structured output a strong LLM returns.
   { id: "amb1", prompt: "amplifier gain 50", type: "common_emitter", targets: { Av: 50 }, difficulty: "hard", style: "ambiguous", llm: { type: "opamp_noninverting", targets: { Av: 50 }, confidence: 0.55 } },

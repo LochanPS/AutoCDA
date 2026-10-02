@@ -565,6 +565,36 @@ const FALLBACK_SVGS = {
   <line x1="250" y1="100" x2="360" y2="100" class="wire"/><circle cx="335" cy="100" r="4" fill="#1a7f42"/><text x="342" y="96" class="lbl" fill="#1a7f42">Vout</text>
   <text x="60" y="185" class="lbl" fill="#8b95a3">Vout = −RC·dVin/dt</text>
 </svg>`,
+
+  fourth_order_lowpass: `<svg viewBox="0 0 460 180" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}.blk{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
+  <text x="14" y="94" class="lbl" fill="#2f6feb">Vin</text><line x1="32" y1="90" x2="70" y2="90" class="wire"/>
+  <rect x="70" y="60" width="130" height="60" rx="6" class="blk"/><text x="135" y="86" text-anchor="middle" class="lbl">Sallen-Key</text><text x="135" y="104" text-anchor="middle" class="lbl">Q=0.541</text>
+  <line x1="200" y1="90" x2="250" y2="90" class="wire"/><circle cx="225" cy="90" r="3" fill="#2f6feb"/>
+  <rect x="250" y="60" width="130" height="60" rx="6" class="blk"/><text x="315" y="86" text-anchor="middle" class="lbl">Sallen-Key</text><text x="315" y="104" text-anchor="middle" class="lbl">Q=1.306</text>
+  <line x1="380" y1="90" x2="430" y2="90" class="wire"/><circle cx="410" cy="90" r="4" fill="#1a7f42"/><text x="400" y="80" class="lbl" fill="#1a7f42">Vout</text>
+  <text x="70" y="150" class="lbl" fill="#8b95a3">R1a {{R1a}} · C1a {{C1a}}  →  R1b {{R1b}} · C1b {{C1b}}</text>
+  <text x="70" y="166" class="lbl" fill="#8b95a3">4th-order Butterworth, −80 dB/decade</text>
+</svg>`,
+
+  current_source: `<svg viewBox="0 0 420 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
+  <text x="200" y="22" text-anchor="middle" class="lbl" fill="#9a6700">+12V</text><line x1="200" y1="26" x2="200" y2="46" class="wire"/>
+  <circle cx="200" cy="56" r="10" class="sym"/><text x="222" y="60" class="lbl">load</text>
+  <line x1="200" y1="66" x2="200" y2="90" class="wire"/>
+  <!-- NMOS -->
+  <line x1="200" y1="90" x2="200" y2="140" class="sym"/><line x1="175" y1="100" x2="175" y2="130" class="sym"/><line x1="175" y1="115" x2="150" y2="115" class="wire"/>
+  <line x1="175" y1="105" x2="200" y2="105" class="sym"/><line x1="175" y1="125" x2="200" y2="125" class="sym"/><text x="210" y="118" class="lbl">M1</text>
+  <!-- op-amp -->
+  <polygon points="80,95 80,145 130,120" class="sym"/><text x="92" y="124" class="lbl">U1</text>
+  <text x="60" y="108" class="lbl" fill="#2f6feb">Vref</text><line x1="62" y1="112" x2="80" y2="112" class="wire"/>
+  <line x1="130" y1="120" x2="150" y2="120" class="wire"/><line x1="150" y1="115" x2="150" y2="160" class="wire"/>
+  <!-- Rset -->
+  <line x1="200" y1="140" x2="200" y2="160" class="wire"/><line x1="150" y1="160" x2="200" y2="160" class="wire"/>
+  <polyline points="200,160 200,168 184,174 216,186 184,198 216,210 200,216 200,224" class="sym"/><text x="228" y="196" class="lbl">{{R1}}</text>
+  <line x1="200" y1="224" x2="200" y2="236" class="wire"/><line x1="188" y1="236" x2="212" y2="236" class="wire"/>
+  <text x="250" y="150" class="lbl" fill="#8b95a3">Iout = Vref / Rset</text>
+</svg>`,
 };
 
 /**

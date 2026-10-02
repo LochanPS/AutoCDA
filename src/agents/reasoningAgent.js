@@ -65,6 +65,8 @@ const MONO = {
   opamp_difference: +1,
   rc_integrator: -1,
   rc_differentiator: -1,
+  fourth_order_lowpass: -1,
+  current_source: -1,
 };
 
 /**
@@ -87,6 +89,7 @@ const JOINT_PAIR = {
   opamp_difference: ["Rf", "R1"],
   rc_integrator: ["R1", "C1"],
   rc_differentiator: ["R1", "C1"],
+  fourth_order_lowpass: ["R1a", "R1b"],
   voltage_divider: ["R1", "R2"],
   opamp_inverting: ["Rf", "R1"],
   opamp_noninverting: ["Rf", "R1"],

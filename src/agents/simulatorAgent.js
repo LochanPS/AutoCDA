@@ -183,6 +183,22 @@ const SIM = {
       `* op-amp differentiator\nV1 in 0 AC 1\nC1 in inv ${num(v.C1)}\nR1 inv out ${num(v.R1)}\nE1 out 0 0 inv 1e6\n.ac dec 100 ${num(t.fc / 100)} ${num(t.fc * 100)}\n.end`,
     measure: (r) => measureUnityGainFreq(r, "in", "out"),
   },
+  fourth_order_lowpass: {
+    targetName: "fc",
+    target: (t) => t.fc,
+    dominant: "R1a",
+    build: (v, t) =>
+      `* 4th-order butterworth low-pass (2 cascaded sallen-key)\nV1 in 0 AC 1\nR1a in a1 ${num(v.R1a)}\nR2a a1 b1 ${num(v.R2a)}\nC2a b1 0 ${num(v.C2a)}\nC1a a1 o1 ${num(v.C1a)}\nE1 o1 0 b1 0 1\nR1b o1 a2 ${num(v.R1b)}\nR2b a2 b2 ${num(v.R2b)}\nC2b b2 0 ${num(v.C2b)}\nC1b a2 out ${num(v.C1b)}\nE2 out 0 b2 0 1\n.ac dec 100 ${num(t.fc / 100)} ${num(t.fc * 100)}\n.end`,
+    measure: (r) => measureCutoff(r, "out"),
+  },
+  current_source: {
+    targetName: "I",
+    target: (t) => t.I,
+    dominant: "R1",
+    build: (v) =>
+      `* op-amp + nmos constant current sink\nVdd vdd 0 DC 12\nVref ref 0 DC 2\nRload vdd d 1k\nVsense d drain DC 0\nM1 drain gate src src NM\nR1 src 0 ${num(v.R1)}\nE1 gate 0 ref src 100000\n.model NM NMOS(VTO=1 KP=2)\n.op\n.end`,
+    measure: (r) => { const dc = measureDC(r, "i(vsense)"); return dc == null ? null : Math.abs(dc); },
+  },
   rc_oscillator: {
     targetName: "f",
     target: (t) => t.f,

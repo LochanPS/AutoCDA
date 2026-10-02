@@ -653,6 +653,74 @@ function rcDifferentiator({ fc = 1000 }) {
   };
 }
 
+function fourthOrderLowpass({ fc = 1000 }) {
+  // 4th-order Butterworth low-pass = two cascaded Sallen-Key stages with the
+  // Butterworth pole Qs (0.5412, 1.3065). Equal-R per stage: C1/C2 = 4*Q^2.
+  const mkStage = (Q) => {
+    const C2 = 10e-9;
+    const C1 = 4 * Q * Q * C2;
+    const R = 1 / (2 * Math.PI * fc * Math.sqrt(C1 * C2));
+    return { R, C1, C2 };
+  };
+  const a = mkStage(0.5412);
+  const b = mkStage(1.3065);
+  const fcActual = fc;
+  return {
+    id: 'fourth_order_lowpass', name: '4th-Order Butterworth Low-Pass',
+    schematic: '/schematics/fourth_order_lowpass.svg',
+    simulationBadge: analyticalBadge(`fc = ${formatFrequency(fcActual)} (−80 dB/dec)`),
+    components: [
+      { ref: 'R1a', rawValue: a.R, unit: 'Ω', display: formatResistance(a.R), description: 'Stage 1 R', editable: true },
+      { ref: 'R2a', rawValue: a.R, unit: 'Ω', display: formatResistance(a.R), description: 'Stage 1 R', editable: true },
+      { ref: 'C1a', rawValue: a.C1, unit: 'F', display: formatCapacitance(a.C1), description: 'Stage 1 feedback C', editable: true },
+      { ref: 'C2a', rawValue: a.C2, unit: 'F', display: formatCapacitance(a.C2), description: 'Stage 1 shunt C', editable: true },
+      { ref: 'R1b', rawValue: b.R, unit: 'Ω', display: formatResistance(b.R), description: 'Stage 2 R', editable: true },
+      { ref: 'R2b', rawValue: b.R, unit: 'Ω', display: formatResistance(b.R), description: 'Stage 2 R', editable: true },
+      { ref: 'C1b', rawValue: b.C1, unit: 'F', display: formatCapacitance(b.C1), description: 'Stage 2 feedback C', editable: true },
+      { ref: 'C2b', rawValue: b.C2, unit: 'F', display: formatCapacitance(b.C2), description: 'Stage 2 shunt C', editable: true },
+    ],
+    derivedParams: { fc: fcActual, Q1: 0.5412, Q2: 1.3065, order: 4 },
+    graph: { type: 'bode', title: `4th-Order Butterworth Low-Pass (fc = ${formatFrequency(fcActual)}, −80 dB/dec)`, xLabel: 'Frequency (Hz)', yLabel: 'Gain (dB)', cutoffFrequency: fcActual, filterType: 'lowpass' },
+    processingSteps: [
+      '[✓] Input received: 4th-Order Butterworth Low-Pass',
+      `[✓] Target cutoff: ${formatFrequency(fc)}`,
+      '[✓] Topology: two cascaded Sallen-Key stages (Q = 0.541, 1.306)',
+      `[✓] 8 components across two stages`,
+      ...analyticalSteps(`fc = ${formatFrequency(fcActual)} (−80 dB/decade)`),
+    ],
+    explanation: `Fourth-order Butterworth low-pass built from two cascaded unity-gain Sallen-Key stages with pole Qs of 0.541 and 1.306. Roll-off is −80 dB/decade past ${formatFrequency(fcActual)}. Eight coupled components; SPICE measures the overall −3 dB point and the loop trims to the target.`,
+    netlist: `4th-Order Butterworth Low-Pass — SPICE Netlist\n*AutoCDA Generated\nV1 in 0 AC 1\nR1a in a1 ${formatResistance(a.R)}\nR2a a1 b1 ${formatResistance(a.R)}\nC2a b1 0 ${formatCapacitance(a.C2)}\nC1a a1 o1 ${formatCapacitance(a.C1)}\nE1 o1 0 b1 0 1\nR1b o1 a2 ${formatResistance(b.R)}\nR2b a2 b2 ${formatResistance(b.R)}\nC2b b2 0 ${formatCapacitance(b.C2)}\nC1b a2 out ${formatCapacitance(b.C1)}\nE2 out 0 b2 0 1\n.ac dec 100 ${(fcActual/100).toPrecision(4)} ${(fcActual*100).toPrecision(4)}\n.end`,
+  };
+}
+
+function currentSource({ I = 0.01 }) {
+  // Op-amp + NMOS constant-current sink. Iout = Vref / Rset. Vref fixed at 2 V.
+  const Vref = 2;
+  const Rset = Vref / I;
+  const IActual = Vref / Rset;
+  return {
+    id: 'current_source', name: 'Constant Current Source',
+    schematic: '/schematics/current_source.svg',
+    simulationBadge: analyticalBadge(`I = ${formatCurrent(IActual)}`),
+    components: [
+      { ref: 'R1', rawValue: Rset, unit: 'Ω', display: formatResistance(Rset), description: 'Set Resistor (Iout = Vref/Rset)', editable: true },
+      { ref: 'M1', rawValue: null, unit: null, display: 'NMOS', description: 'Pass Transistor', editable: false },
+    ],
+    derivedParams: { I: IActual, Vref },
+    graph: { type: 'bar', title: 'Constant Current Source',
+      data: [{ label: `Iout (${formatCurrent(IActual)})`, value: +(IActual * 1000).toFixed(2), color: '#3fb950' }] },
+    processingSteps: [
+      '[✓] Input received: Constant Current Source',
+      `[✓] Target current: ${formatCurrent(I)}`,
+      '[✓] Topology: op-amp + NMOS, Iout = Vref/Rset (Vref = 2 V)',
+      `[✓] Rset = ${formatResistance(Rset)}`,
+      ...analyticalSteps(`I = ${formatCurrent(IActual)}`),
+    ],
+    explanation: `Op-amp + NMOS constant-current sink. The op-amp forces the set-resistor voltage to Vref (2 V), so Iout = Vref/Rset = ${formatCurrent(IActual)} regardless of load (within compliance). SPICE measures the delivered current and the loop trims Rset.`,
+    netlist: `Constant Current Source — SPICE Netlist\n*AutoCDA Generated\nVdd vdd 0 DC 12\nVref ref 0 DC ${Vref}\nRload vdd d 1k\nVsense d drain DC 0\nM1 drain gate src src NM\nR1 src 0 ${formatResistance(Rset)}\nE1 gate 0 ref src 100000\n.model NM NMOS(VTO=1 KP=2)\n.op\n.end`,
+  };
+}
+
 // ── main export ──────────────────────────────────────────────────────────────
 
 export function calculateCircuit(circuitId, params) {
@@ -675,6 +743,8 @@ export function calculateCircuit(circuitId, params) {
     case 'opamp_difference':    return opampDifference(params);
     case 'rc_integrator':       return rcIntegrator(params);
     case 'rc_differentiator':   return rcDifferentiator(params);
+    case 'fourth_order_lowpass': return fourthOrderLowpass(params);
+    case 'current_source':      return currentSource(params);
     default: return null;
   }
 }

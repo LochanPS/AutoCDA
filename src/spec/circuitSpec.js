@@ -44,6 +44,8 @@ export const SUPPORTED_TYPES = [
   { id: 'opamp_difference', name: 'Difference Amplifier', fields: ['Av'] },
   { id: 'rc_integrator', name: 'Op-Amp Integrator', fields: ['fc'] },
   { id: 'rc_differentiator', name: 'Op-Amp Differentiator', fields: ['fc'] },
+  { id: 'fourth_order_lowpass', name: '4th-Order Butterworth Low-Pass', fields: ['fc'] },
+  { id: 'current_source', name: 'Constant Current Source', fields: ['I'] },
 ];
 
 /** Default constraint values applied when a partial spec omits them. */
