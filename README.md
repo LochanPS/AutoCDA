@@ -98,6 +98,37 @@ default, or a real LLM when enabled. Full move-by-move trace is shown in Details
 
 ---
 
+## Verification API ("the SPICE-verified truth layer")
+
+Any tool or LLM can POST a circuit intent and get back a verified, buyable design —
+real values, the ngspice-measured result, honest error, netlist, and BOM. ngspice
+runs server-side, so there's no per-call AI cost.
+
+```bash
+npm run verify-api        # starts http://localhost:3002
+```
+
+```
+GET  /api/health                      -> { ok, types }
+GET  /api/types                       -> [{ id, name, fields }]
+POST /api/parse    { prompt }         -> { type, targets, constraints, confidence }
+POST /api/verify   { prompt }  |  { type, targets, constraints?, strategy? }
+                                      -> verified design + measured error + netlist + BOM
+POST /api/compose  { stages: [{ type, targets }, ...] }
+                                      -> cascaded multi-stage circuit, measured end to end
+```
+
+Example:
+```bash
+curl -s -X POST http://localhost:3002/api/verify \
+  -H 'content-type: application/json' \
+  -d '{"prompt":"low pass filter 2kHz on E96, 1% tolerance"}'
+```
+
+The **composition engine** chains the verified block library into larger circuits
+(e.g. cascaded filter + amplifier), building one netlist that ngspice measures end
+to end — the path from a fixed menu toward "any circuit".
+
 ## Exports
 
 - **KiCad** simulation-ready schematic (`.kicad_sch`)
