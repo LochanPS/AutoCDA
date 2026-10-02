@@ -27,8 +27,8 @@ describe("designerAgent", () => {
 describe("simulatorAgent primitives (pure)", () => {
   test("isVerifiable reflects the descriptor table", () => {
     expect(isVerifiable("rc_lowpass")).toBe(true);
-    expect(isVerifiable("zener_regulator")).toBe(true); // now SPICE-verified
-    expect(isVerifiable("rc_oscillator")).toBe(false);  // transient/FFT — still analytical
+    expect(isVerifiable("zener_regulator")).toBe(true); // shunt regulator, DC
+    expect(isVerifiable("rc_oscillator")).toBe(true);   // Wien peak via AC sweep
     expect(isVerifiable("banana")).toBe(false);
   });
 
@@ -37,7 +37,7 @@ describe("simulatorAgent primitives (pure)", () => {
     const bp = circuitTargetInfo("band_pass", { fL: 200, fH: 2000 });
     expect(bp.name).toBe("fc");
     expect(bp.value).toBeCloseTo(Math.sqrt(200 * 2000), 6);
-    expect(circuitTargetInfo("rc_oscillator", {})).toBeNull();
+    expect(circuitTargetInfo("rc_oscillator", { f: 1000 })).toEqual({ name: "f", value: 1000 });
   });
 
   test("dominantRef names the refined component", () => {

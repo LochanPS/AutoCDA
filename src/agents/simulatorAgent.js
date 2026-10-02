@@ -124,8 +124,19 @@ const SIM = {
     },
     measure: (r) => measureDC(r, "out"),
   },
-  // Oscillation frequency needs a transient run + zero-cross period detection.
-  rc_oscillator: { verifiable: false },
+  rc_oscillator: {
+    targetName: "f",
+    target: (t) => t.f,
+    dominant: "C1",
+    // A Wien-bridge oscillator runs at the frequency where its frequency-setting
+    // network has zero phase shift — the resonant peak of the Wien band-pass,
+    // f0 = 1/(2*pi*R*C). We verify that peak directly with an AC sweep (robust),
+    // rather than relying on a transient oscillation to start and sustain (which
+    // needs amplitude-limiting nonlinearity SPICE will not reliably converge on).
+    build: (v, t) =>
+      `* wien frequency network\nV1 in 0 AC 1\nR1 in a ${num(v.R1)}\nC1 a out ${num(v.C1)}\nRp out 0 ${num(v.R1)}\nCp out 0 ${num(v.C1)}\n.ac dec 200 ${num(t.f / 100)} ${num(t.f * 100)}\n.end`,
+    measure: (r) => measurePeakFreq(r, "out"),
+  },
 };
 
 /** Descriptor for a type (internal). */
