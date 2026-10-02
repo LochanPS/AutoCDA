@@ -132,7 +132,8 @@ const CIRCUIT_PATTERNS = [
   },
   {
     id: 'rc_lowpass',
-    keywords: ['low pass', 'low-pass', 'lowpass', 'lp filter', 'lp '],
+    keywords: ['low pass', 'low-pass', 'lowpass', 'lpf', 'lp filter', 'lp ',
+               'cut everything above', 'cut above', 'roll off above', 'attenuate above', 'remove above', 'smooth'],
     fields: ['fc'],
     extract: (text) => {
       const fc = extractFrequency(text);
@@ -142,7 +143,9 @@ const CIRCUIT_PATTERNS = [
   },
   {
     id: 'rc_highpass',
-    keywords: ['high pass', 'high-pass', 'highpass', 'hp filter', 'hp '],
+    keywords: ['high pass', 'high-pass', 'highpass', 'hpf', 'hp filter', 'hp ',
+               'block below', 'block everything below', 'remove below', 'cut below', 'pass above', 'only above',
+               'remove low frequency', 'block dc', 'ac coupling'],
     fields: ['fc'],
     extract: (text) => {
       const fc = extractFrequency(text);
@@ -155,8 +158,15 @@ const CIRCUIT_PATTERNS = [
     keywords: ['band pass', 'band-pass', 'bandpass', 'bp filter'],
     fields: ['fL', 'fH'],
     extract: (text) => {
-      const freqs = [...text.matchAll(new RegExp(`(${NUM})\\s*([kmKM])?\\s*(?:hz|hertz)`, 'gi'))]
+      let freqs = [...text.matchAll(new RegExp(`(${NUM})\\s*([kmKM])?\\s*(?:hz|hertz)`, 'gi'))]
         .map(m => parseFloat(m[1]) * (SI_PREFIX[m[2]] || 1));
+      // Fallback: "X to Y" (optionally with k/M) where Hz is omitted after the first.
+      if (freqs.length < 2) {
+        const pair = [...text.matchAll(new RegExp(`(${NUM})\\s*([kmgKMG])?`, 'g'))]
+          .map(m => parseFloat(m[1]) * (SI_PREFIX[m[2]] || 1))
+          .filter(v => v > 0);
+        if (pair.length >= 2) freqs = pair;
+      }
       if (freqs.length >= 2) return { fL: Math.min(...freqs), fH: Math.max(...freqs) };
       const fc = extractFrequency(text);
       // Single centre frequency → derive a decade-wide band around it.
@@ -173,6 +183,22 @@ const CIRCUIT_PATTERNS = [
       return Av ? { Av } : {};
     },
     defaults: { Av: 20 },
+  },
+  // Summing / difference MUST precede inverting/non-inverting: "inverting summer"
+  // contains "inverting", so the inverting pattern would otherwise grab it.
+  {
+    id: 'opamp_summing',
+    keywords: ['summing', 'summer', 'adder amp', 'summing amp', 'adder amplifier'],
+    fields: ['Av'],
+    extract: (text) => { const Av = extractGain(text); return Av ? { Av } : {}; },
+    defaults: { Av: 1 },
+  },
+  {
+    id: 'opamp_difference',
+    keywords: ['difference amp', 'differential amp', 'subtractor', 'subtracting amp', 'difference amplifier'],
+    fields: ['Av'],
+    extract: (text) => { const Av = extractGain(text); return Av ? { Av } : {}; },
+    defaults: { Av: 1 },
   },
   // NOTE: non-inverting MUST come before inverting — the string "non-inverting"
   // contains the substring "inverting", so the inverting pattern would otherwise
@@ -202,8 +228,15 @@ const CIRCUIT_PATTERNS = [
     keywords: ['zener', 'voltage regulator', 'zener regulator', 'zener diode'],
     fields: ['Vin', 'Vz'],
     extract: (text) => {
-      const Vz = extractVoltage(text, 'zener') || extractVoltage(text, 'output') || extractVoltage(text, 'regulate');
-      const Vin = extractVoltage(text, 'input') || extractVoltage(text, 'supply') || extractVoltage(text, 'from');
+      let Vin = extractVoltage(text, 'input') || extractVoltage(text, 'supply') || extractVoltage(text, 'from');
+      let Vz = extractVoltage(text, 'to') || extractVoltage(text, 'output') || extractVoltage(text, 'regulate to');
+      // Fallback: first voltage = input, second = zener (handles "12V to 5V",
+      // "regulate 9v to 3.3v with a zener", "zener regulator 12V 5V").
+      if (!Vin || !Vz) {
+        const allV = [...text.matchAll(new RegExp(`(${NUM})\\s*([kmµuKM])?\\s*v\\b`, 'gi'))]
+          .map(m => parseFloat(m[1]) * (SI_PREFIX[m[2]] || 1));
+        if (allV.length >= 2) { Vin = Vin || allV[0]; Vz = Vz || allV[1]; }
+      }
       const out = {};
       if (Vin) out.Vin = Vin;
       if (Vz) out.Vz = Vz;
@@ -227,7 +260,8 @@ const CIRCUIT_PATTERNS = [
   },
   {
     id: 'rc_oscillator',
-    keywords: ['oscillator', 'wien bridge', 'phase shift oscillator', 'rc oscillator'],
+    keywords: ['oscillator', 'wien bridge', 'phase shift oscillator', 'rc oscillator',
+               'sine wave', 'sine generator', 'tone generator', 'tone'],
     fields: ['f'],
     extract: (text) => {
       const f = extractFrequency(text);
@@ -268,20 +302,6 @@ const CIRCUIT_PATTERNS = [
     fields: ['fc'],
     extract: (text) => { const fc = extractFrequency(text); return fc ? { fc } : {}; },
     defaults: { fc: 1000 },
-  },
-  {
-    id: 'opamp_difference',
-    keywords: ['difference amp', 'differential amp', 'subtractor', 'subtracting amp', 'difference amplifier'],
-    fields: ['Av'],
-    extract: (text) => { const Av = extractGain(text); return Av ? { Av } : {}; },
-    defaults: { Av: 1 },
-  },
-  {
-    id: 'opamp_summing',
-    keywords: ['summing', 'summer', 'adder amp', 'summing amp', 'adder amplifier'],
-    fields: ['Av'],
-    extract: (text) => { const Av = extractGain(text); return Av ? { Av } : {}; },
-    defaults: { Av: 1 },
   },
   // Two-stage / multi-stage / cascaded amplifier. Before the generic 'amplifier'
   // fallback so "two-stage amplifier gain 100" is not grabbed as a single stage.
