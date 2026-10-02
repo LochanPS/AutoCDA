@@ -134,6 +134,23 @@ const SIM = {
       `* sallen-key low-pass (unity gain)\nV1 in 0 AC 1\nR1 in a ${num(v.R1)}\nR2 a b ${num(v.R2)}\nC2 b 0 ${num(v.C2)}\nC1 a out ${num(v.C1)}\nE1 out 0 b 0 1\n.ac dec 100 ${num(t.fc / 100)} ${num(t.fc * 100)}\n.end`,
     measure: (r) => measureCutoff(r, "out"),
   },
+  sallen_key_highpass: {
+    targetName: "fc",
+    target: (t) => t.fc,
+    dominant: "R1",
+    build: (v, t) =>
+      `* sallen-key high-pass (unity gain)\nV1 in 0 AC 1\nC1 in a ${num(v.C1)}\nC2 a b ${num(v.C2)}\nR2 b 0 ${num(v.R2)}\nR1 a out ${num(v.R1)}\nE1 out 0 b 0 1\n.ac dec 100 ${num(t.fc / 100)} ${num(t.fc * 100)}\n.end`,
+    measure: (r) => measureCutoff(r, "out"),
+  },
+  two_stage_amplifier: {
+    targetName: "Av",
+    target: (t) => t.Av,
+    dominant: "Rf1",
+    // Two cascaded ideal non-inverting stages (VCVS op-amps); measure end-to-end gain.
+    build: (v) =>
+      `* two-stage non-inverting amplifier\nVin in 0 AC 1\nRg1 inv1 0 ${num(v.Rg1)}\nRf1 inv1 o1 ${num(v.Rf1)}\nE1 o1 0 in inv1 1e6\nRg2 inv2 0 ${num(v.Rg2)}\nRf2 inv2 o2 ${num(v.Rf2)}\nE2 o2 0 o1 inv2 1e6\n.ac lin 1 1000 1000\n.end`,
+    measure: (r) => measureGain(r, "in", "o2"),
+  },
   rc_oscillator: {
     targetName: "f",
     target: (t) => t.f,

@@ -92,6 +92,17 @@ const CIRCUIT_PATTERNS = [
   // Sallen-Key / 2nd-order low-pass MUST precede rc_lowpass: "sallen-key lowpass"
   // contains the substring "lowpass", so rc_lowpass would otherwise win.
   {
+    id: 'sallen_key_highpass',
+    keywords: ['sallen-key high', 'sallen key high', 'second order high', 'second-order high',
+               '2nd order high', '2nd-order high', 'two pole high', 'two-pole high', 'butterworth high'],
+    fields: ['fc'],
+    extract: (text) => {
+      const fc = extractFrequency(text);
+      return fc ? { fc } : {};
+    },
+    defaults: { fc: 1000 },
+  },
+  {
     id: 'sallen_key_lowpass',
     keywords: ['sallen', 'sallen-key', 'sallen key', 'second order low', 'second-order low',
                '2nd order low', '2nd-order low', 'two pole low', 'two-pole low', 'butterworth low'],
@@ -226,6 +237,19 @@ const CIRCUIT_PATTERNS = [
       return out;
     },
     defaults: { Vin: 12, Vout: 5 },
+  },
+  // Two-stage / multi-stage / cascaded amplifier. Before the generic 'amplifier'
+  // fallback so "two-stage amplifier gain 100" is not grabbed as a single stage.
+  {
+    id: 'two_stage_amplifier',
+    keywords: ['two stage', 'two-stage', '2 stage', '2-stage', 'multistage', 'multi stage',
+               'multi-stage', 'cascaded amp', 'cascade amp', 'two-stage amp'],
+    fields: ['Av'],
+    extract: (text) => {
+      const Av = extractGain(text);
+      return Av ? { Av } : {};
+    },
+    defaults: { Av: 100 },
   },
   // Generic op-amp (no inverting/non-inverting stated). MUST come before the
   // greedy 'amp ' fallback, otherwise "op-amp gain 5" matches 'amp ' and is

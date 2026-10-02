@@ -179,6 +179,16 @@ const CURATED = [
   { id: "sk5", prompt: "two-pole low pass, cutoff 1.5 kHz", type: "sallen_key_lowpass", targets: { fc: 1500 }, difficulty: "hard", style: "colloquial" },
   { id: "sk6", prompt: "sallen key filter 800 Hz", type: "sallen_key_lowpass", targets: { fc: 800 }, difficulty: "easy", style: "canonical" },
 
+  // ── sallen_key_highpass + two_stage_amplifier ───────────────────────────────
+  { id: "skhp1", prompt: "sallen-key high pass 1kHz", type: "sallen_key_highpass", targets: { fc: 1000 }, difficulty: "easy", style: "canonical" },
+  { id: "skhp2", prompt: "second order high pass 2kHz", type: "sallen_key_highpass", targets: { fc: 2000 }, difficulty: "medium", style: "canonical" },
+  { id: "skhp3", prompt: "butterworth high pass 500 Hz", type: "sallen_key_highpass", targets: { fc: 500 }, difficulty: "medium", style: "canonical" },
+  { id: "skhp4", prompt: "two-pole high pass at 3.3kHz", type: "sallen_key_highpass", targets: { fc: 3300 }, difficulty: "hard", style: "colloquial" },
+  { id: "ts1", prompt: "two stage amplifier gain 100", type: "two_stage_amplifier", targets: { Av: 100 }, difficulty: "easy", style: "canonical" },
+  { id: "ts2", prompt: "two-stage amplifier gain 500", type: "two_stage_amplifier", targets: { Av: 500 }, difficulty: "medium", style: "canonical" },
+  { id: "ts3", prompt: "cascaded amplifier gain 1000", type: "two_stage_amplifier", targets: { Av: 1000 }, difficulty: "medium", style: "colloquial" },
+  { id: "ts4", prompt: "multistage amp gain 250", type: "two_stage_amplifier", targets: { Av: 250 }, difficulty: "hard", style: "colloquial" },
+
   // A few genuinely ambiguous cases: capable LLM makes a reasonable call but may
   // not match the label. `llm` gives the structured output a strong LLM returns.
   { id: "amb1", prompt: "amplifier gain 50", type: "common_emitter", targets: { Av: 50 }, difficulty: "hard", style: "ambiguous", llm: { type: "opamp_noninverting", targets: { Av: 50 }, confidence: 0.55 } },

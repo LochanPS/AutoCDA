@@ -456,6 +456,57 @@ const FALLBACK_SVGS = {
   <line x1="82" y1="237" x2="102" y2="237" class="wire"/>
   <line x1="87" y1="245" x2="97" y2="245" class="wire"/>
 </svg>`,
+
+  sallen_key_highpass: `<svg viewBox="0 0 440 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
+  <text x="18" y="84" class="lbl" fill="#2f6feb">Vin</text>
+  <line x1="34" y1="80" x2="70" y2="80" class="wire"/>
+  <!-- C1 series -->
+  <line x1="70" y1="66" x2="70" y2="94" class="sym" stroke-width="3"/><line x1="82" y1="66" x2="82" y2="94" class="sym" stroke-width="3"/>
+  <text x="76" y="58" text-anchor="middle" class="lbl">{{C1}}</text>
+  <line x1="82" y1="80" x2="150" y2="80" class="wire"/>
+  <circle cx="150" cy="80" r="3" fill="#2f6feb"/>
+  <!-- C2 series -->
+  <line x1="162" y1="66" x2="162" y2="94" class="sym" stroke-width="3"/><line x1="174" y1="66" x2="174" y2="94" class="sym" stroke-width="3"/>
+  <text x="168" y="58" text-anchor="middle" class="lbl">{{C2}}</text>
+  <line x1="150" y1="80" x2="162" y2="80" class="wire"/>
+  <line x1="174" y1="80" x2="240" y2="80" class="wire"/>
+  <circle cx="240" cy="80" r="3" fill="#2f6feb"/>
+  <!-- R2 node b to ground -->
+  <polyline points="240,80 240,92 226,98 254,110 226,122 254,134 240,140 240,150" class="sym"/>
+  <text x="212" y="118" text-anchor="middle" class="lbl">{{R2}}</text>
+  <line x1="240" y1="150" x2="240" y2="168" class="wire"/><line x1="228" y1="168" x2="252" y2="168" class="wire"/><line x1="233" y1="175" x2="247" y2="175" class="wire"/>
+  <!-- op-amp buffer -->
+  <polygon points="270,55 270,105 320,80" class="sym"/><text x="300" y="84" text-anchor="middle" class="lbl">U1</text>
+  <line x1="240" y1="80" x2="270" y2="80" class="wire"/>
+  <line x1="320" y1="80" x2="400" y2="80" class="wire"/>
+  <circle cx="375" cy="80" r="4" fill="#1a7f42"/><text x="382" y="76" class="lbl" fill="#1a7f42">Vout</text>
+  <!-- R1 feedback node a to output -->
+  <line x1="150" y1="80" x2="150" y2="34" class="wire"/>
+  <polyline points="150,34 170,34 174,22 182,46 190,22 198,46 206,22 214,46 222,34 340,34" class="sym"/>
+  <text x="250" y="22" text-anchor="middle" class="lbl">{{R1}}</text>
+  <line x1="340" y1="34" x2="340" y2="80" class="wire"/>
+  <text x="60" y="200" class="lbl" fill="#8b95a3">2nd-order Butterworth (Q=0.707)</text>
+</svg>`,
+
+  two_stage_amplifier: `<svg viewBox="0 0 460 210" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
+  <text x="14" y="104" class="lbl" fill="#2f6feb">Vin</text>
+  <line x1="32" y1="100" x2="70" y2="100" class="wire"/>
+  <!-- stage 1 -->
+  <polygon points="70,70 70,130 130,100" class="sym"/><text x="92" y="104" class="lbl">U1</text>
+  <text x="100" y="150" text-anchor="middle" class="lbl">{{Rf1}}</text>
+  <text x="100" y="164" text-anchor="middle" class="lbl">{{Rg1}}</text>
+  <line x1="130" y1="100" x2="210" y2="100" class="wire"/>
+  <circle cx="175" cy="100" r="3" fill="#2f6feb"/><text x="165" y="92" class="lbl">o1</text>
+  <!-- stage 2 -->
+  <polygon points="210,70 210,130 270,100" class="sym"/><text x="232" y="104" class="lbl">U2</text>
+  <text x="240" y="150" text-anchor="middle" class="lbl">{{Rf2}}</text>
+  <text x="240" y="164" text-anchor="middle" class="lbl">{{Rg2}}</text>
+  <line x1="270" y1="100" x2="420" y2="100" class="wire"/>
+  <circle cx="395" cy="100" r="4" fill="#1a7f42"/><text x="402" y="96" class="lbl" fill="#1a7f42">Vout</text>
+  <text x="70" y="192" class="lbl" fill="#8b95a3">Two cascaded non-inverting stages (gain = g1 × g2)</text>
+</svg>`,
 };
 
 /**
@@ -474,15 +525,19 @@ function schematicWithValues(circuit) {
   const diode = (r) => (byRef[r] && byRef[r].display ? byRef[r].display : r);
   const volt = (x, prefix, fallback) =>
     typeof x === "number" && isFinite(x) ? `${prefix}${formatVoltage(x)}` : fallback;
-  const map = {
-    R1: refLbl("R1"), R2: refLbl("R2"), RC: refLbl("RC"), RE: refLbl("RE"),
-    C1: refLbl("C1"), C2: refLbl("C2"), Rf: refLbl("Rf"),
-    D1: diode("D1"), Dz: diode("Dz"),
+  const volts = {
     Vin: volt(dp.Vin, "", "Vin"),
     Vsupply: volt(dp.Vsupply, "", "Vin"),
     Vout: volt(dp.Vout, "Vout=", "Vout"),
   };
-  return base.replace(/\{\{(\w+)\}\}/g, (_, k) => (map[k] != null ? map[k] : k));
+  // A token is a voltage label, a diode/zener (show its Vf/Vz display), or any
+  // component ref (show "ref display"); unknown tokens fall back to the bare name.
+  return base.replace(/\{\{(\w+)\}\}/g, (_, k) => {
+    if (volts[k] != null) return volts[k];
+    if (k === "D1" || k === "Dz") return diode(k);
+    if (byRef[k]) return refLbl(k);
+    return k;
+  });
 }
 
 export default function SchematicPanel({ circuit, visible }) {

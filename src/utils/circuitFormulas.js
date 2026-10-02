@@ -470,6 +470,80 @@ function sallenKeyLowpass({ fc = 1000 }) {
   };
 }
 
+function sallenKeyHighpass({ fc = 1000 }) {
+  // Unity-gain, equal-C Sallen-Key high-pass, Butterworth. Dual of the low-pass:
+  // C1=C2=C, R2/R1 = 2 gives Q = 0.707.  fc = 1/(2*pi*C*sqrt(R1*R2)).
+  const C = 10e-9;
+  const R1 = 1 / (2 * Math.PI * C * fc * Math.SQRT2);
+  const R2 = 2 * R1;
+  const fcActual = 1 / (2 * Math.PI * C * Math.sqrt(R1 * R2));
+  return {
+    id: 'sallen_key_highpass',
+    name: 'Sallen-Key High-Pass (2nd order)',
+    schematic: '/schematics/sallen_key_highpass.svg',
+    simulationBadge: analyticalBadge(`fc = ${formatFrequency(fcActual)}`),
+    components: [
+      { ref: 'C1', rawValue: C,  unit: 'F', display: formatCapacitance(C), description: 'Input Cap',      editable: true },
+      { ref: 'C2', rawValue: C,  unit: 'F', display: formatCapacitance(C), description: 'Second Cap',     editable: true },
+      { ref: 'R1', rawValue: R1, unit: 'Ω', display: formatResistance(R1), description: 'Feedback Resistor', editable: true },
+      { ref: 'R2', rawValue: R2, unit: 'Ω', display: formatResistance(R2), description: 'Shunt Resistor',    editable: true },
+    ],
+    derivedParams: { fc: fcActual, Q: 0.707, order: 2 },
+    graph: { type: 'bode', title: `Frequency Response — Sallen-Key High-Pass (fc = ${formatFrequency(fcActual)}, 2nd order)`, xLabel: 'Frequency (Hz)', yLabel: 'Gain (dB)', cutoffFrequency: fcActual, filterType: 'highpass' },
+    processingSteps: [
+      '[✓] Input received: Sallen-Key High-Pass Filter',
+      `[✓] Target cutoff: ${formatFrequency(fc)}`,
+      '[✓] Topology: 2nd-order unity-gain Sallen-Key (Butterworth)',
+      '[✓] Formula: fc = 1/(2π·C·√(R1·R2)), Q = 0.5·√(R2/R1)',
+      `[✓] C1 = C2 = ${formatCapacitance(C)}, R2/R1 = 2 → Q = 0.707`,
+      `[✓] R1 = ${formatResistance(R1)}, R2 = ${formatResistance(R2)}`,
+      ...analyticalSteps(`fc = ${formatFrequency(fcActual)} (+40 dB/decade)`),
+    ],
+    explanation: `Second-order unity-gain Sallen-Key high-pass. With C1 = C2 = ${formatCapacitance(C)}, R1 = ${formatResistance(R1)}, R2 = ${formatResistance(R2)} (R2/R1 = 2) the response is Butterworth (Q = 0.707), cutoff ${formatFrequency(fcActual)}, +40 dB/decade below fc. Four coupled components; no single-component closed form, so SPICE-graded refinement finishes it.`,
+    netlist: `Sallen-Key High-Pass — SPICE Netlist\n*AutoCDA Generated\nV1 in 0 AC 1\nC1 in a ${formatCapacitance(C)}\nC2 a b ${formatCapacitance(C)}\nR2 b 0 ${formatResistance(R2)}\nR1 a out ${formatResistance(R1)}\nE1 out 0 b 0 1\n.ac dec 100 ${(fcActual/100).toPrecision(4)} ${(fcActual*100).toPrecision(4)}\n.end`,
+  };
+}
+
+function twoStageAmplifier({ Av = 100 }) {
+  // Two cascaded non-inverting op-amp stages; total gain = g1 * g2. Split the
+  // target geometrically so each stage has a moderate, well-conditioned gain.
+  const g = Math.sqrt(Av);
+  const Rg = 10000;
+  const Rf = (g - 1) * Rg; // non-inverting: gain = 1 + Rf/Rg
+  const AvActual = (1 + Rf / Rg) * (1 + Rf / Rg);
+  return {
+    id: 'two_stage_amplifier',
+    name: 'Two-Stage Amplifier',
+    schematic: '/schematics/two_stage_amplifier.svg',
+    simulationBadge: analyticalBadge(`Av = ${+AvActual.toPrecision(3)}`),
+    components: [
+      { ref: 'Rg1', rawValue: Rg, unit: 'Ω', display: formatResistance(Rg), description: 'Stage 1 Ground Resistor', editable: true },
+      { ref: 'Rf1', rawValue: Rf, unit: 'Ω', display: formatResistance(Rf), description: 'Stage 1 Feedback',       editable: true },
+      { ref: 'Rg2', rawValue: Rg, unit: 'Ω', display: formatResistance(Rg), description: 'Stage 2 Ground Resistor', editable: true },
+      { ref: 'Rf2', rawValue: Rf, unit: 'Ω', display: formatResistance(Rf), description: 'Stage 2 Feedback',       editable: true },
+    ],
+    derivedParams: { Av: AvActual, stages: 2, perStageGain: +g.toPrecision(3) },
+    graph: {
+      type: 'bar', title: 'Two-Stage Gain (×)',
+      data: [
+        { label: 'Stage 1', value: +(1 + Rf / Rg).toFixed(2), color: '#58a6ff' },
+        { label: 'Stage 2', value: +(1 + Rf / Rg).toFixed(2), color: '#58a6ff' },
+        { label: 'Total', value: +AvActual.toFixed(2), color: '#3fb950' },
+      ],
+    },
+    processingSteps: [
+      '[✓] Input received: Two-Stage Amplifier',
+      `[✓] Target gain: ${+Av.toPrecision(3)}×`,
+      '[✓] Topology: two cascaded non-inverting op-amp stages',
+      `[✓] Split: each stage ≈ ${+g.toPrecision(3)}× (√total)`,
+      `[✓] Per stage: Rg = ${formatResistance(Rg)}, Rf = ${formatResistance(Rf)} (1 + Rf/Rg)`,
+      ...analyticalSteps(`Av = ${+AvActual.toPrecision(3)}×`),
+    ],
+    explanation: `Two cascaded non-inverting stages give a total gain of ${+AvActual.toPrecision(3)}× (≈ ${+g.toPrecision(3)}× each). Splitting a large gain across two stages keeps each stage's bandwidth and accuracy reasonable versus one high-gain stage. SPICE measures the end-to-end gain and the loop trims the feedback resistors to the target.`,
+    netlist: `Two-Stage Amplifier — SPICE Netlist\n*AutoCDA Generated\nVin in 0 AC 1\nRg1 inv1 0 ${formatResistance(Rg)}\nRf1 inv1 o1 ${formatResistance(Rf)}\nE1 o1 0 in inv1 1e6\nRg2 inv2 0 ${formatResistance(Rg)}\nRf2 inv2 o2 ${formatResistance(Rf)}\nE2 o2 0 o1 inv2 1e6\n.ac lin 1 1000 1000\n.end`,
+  };
+}
+
 // ── main export ──────────────────────────────────────────────────────────────
 
 export function calculateCircuit(circuitId, params) {
@@ -486,6 +560,8 @@ export function calculateCircuit(circuitId, params) {
     case 'zener_regulator':     return zenerRegulator(params);
     case 'rc_oscillator':       return rcOscillator(params);
     case 'sallen_key_lowpass':  return sallenKeyLowpass(params);
+    case 'sallen_key_highpass': return sallenKeyHighpass(params);
+    case 'two_stage_amplifier': return twoStageAmplifier(params);
     default: return null;
   }
 }

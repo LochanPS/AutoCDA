@@ -74,6 +74,8 @@ const JOINT_PAIR = {
   band_pass: ["R1", "C1"],
   rc_oscillator: ["R1", "C1"],
   sallen_key_lowpass: ["R1", "R2"],
+  sallen_key_highpass: ["R1", "R2"],
+  two_stage_amplifier: ["Rf1", "Rf2"],
   voltage_divider: ["R1", "R2"],
   opamp_inverting: ["Rf", "R1"],
   opamp_noninverting: ["Rf", "R1"],
