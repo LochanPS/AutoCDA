@@ -12,7 +12,8 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "pricing-proxy": "node server/pricingProxy.js"
+    "pricing-proxy": "node server/pricingProxy.js",
+    "verify-api": "node --import ./server/loader.mjs server/apiServer.mjs"
   },
   "browserslist": {
     "production": [
