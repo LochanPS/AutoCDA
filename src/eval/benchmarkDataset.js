@@ -189,6 +189,19 @@ const CURATED = [
   { id: "ts3", prompt: "cascaded amplifier gain 1000", type: "two_stage_amplifier", targets: { Av: 1000 }, difficulty: "medium", style: "colloquial" },
   { id: "ts4", prompt: "multistage amp gain 250", type: "two_stage_amplifier", targets: { Av: 250 }, difficulty: "hard", style: "colloquial" },
 
+  // ── summing / difference / integrator / differentiator ──────────────────────
+  { id: "sum1", prompt: "summing amplifier gain 2", type: "opamp_summing", targets: { Av: 2 }, difficulty: "easy", style: "canonical" },
+  { id: "sum2", prompt: "inverting summer gain 4", type: "opamp_summing", targets: { Av: 4 }, difficulty: "medium", style: "canonical" },
+  { id: "sum3", prompt: "adder amplifier gain 1", type: "opamp_summing", targets: { Av: 1 }, difficulty: "medium", style: "colloquial" },
+  { id: "diff1", prompt: "difference amplifier gain 10", type: "opamp_difference", targets: { Av: 10 }, difficulty: "easy", style: "canonical" },
+  { id: "diff2", prompt: "differential amplifier gain 5", type: "opamp_difference", targets: { Av: 5 }, difficulty: "medium", style: "canonical" },
+  { id: "diff3", prompt: "subtractor gain 2", type: "opamp_difference", targets: { Av: 2 }, difficulty: "hard", style: "colloquial" },
+  { id: "int1", prompt: "op-amp integrator 1kHz", type: "rc_integrator", targets: { fc: 1000 }, difficulty: "easy", style: "canonical" },
+  { id: "int2", prompt: "integrator unity gain at 500 Hz", type: "rc_integrator", targets: { fc: 500 }, difficulty: "medium", style: "canonical" },
+  { id: "int3", prompt: "integrating amplifier 2kHz", type: "rc_integrator", targets: { fc: 2000 }, difficulty: "medium", style: "colloquial" },
+  { id: "der1", prompt: "op-amp differentiator 2kHz", type: "rc_differentiator", targets: { fc: 2000 }, difficulty: "easy", style: "canonical" },
+  { id: "der2", prompt: "differentiator 1kHz", type: "rc_differentiator", targets: { fc: 1000 }, difficulty: "medium", style: "canonical" },
+
   // A few genuinely ambiguous cases: capable LLM makes a reasonable call but may
   // not match the label. `llm` gives the structured output a strong LLM returns.
   { id: "amb1", prompt: "amplifier gain 50", type: "common_emitter", targets: { Av: 50 }, difficulty: "hard", style: "ambiguous", llm: { type: "opamp_noninverting", targets: { Av: 50 }, confidence: 0.55 } },

@@ -238,6 +238,34 @@ const CIRCUIT_PATTERNS = [
     },
     defaults: { Vin: 12, Vout: 5 },
   },
+  {
+    id: 'rc_integrator',
+    keywords: ['integrator', 'integrating amp', 'op-amp integrator', 'opamp integrator'],
+    fields: ['fc'],
+    extract: (text) => { const fc = extractFrequency(text); return fc ? { fc } : {}; },
+    defaults: { fc: 1000 },
+  },
+  {
+    id: 'rc_differentiator',
+    keywords: ['differentiator', 'differentiating amp', 'op-amp differentiator'],
+    fields: ['fc'],
+    extract: (text) => { const fc = extractFrequency(text); return fc ? { fc } : {}; },
+    defaults: { fc: 1000 },
+  },
+  {
+    id: 'opamp_difference',
+    keywords: ['difference amp', 'differential amp', 'subtractor', 'subtracting amp', 'difference amplifier'],
+    fields: ['Av'],
+    extract: (text) => { const Av = extractGain(text); return Av ? { Av } : {}; },
+    defaults: { Av: 1 },
+  },
+  {
+    id: 'opamp_summing',
+    keywords: ['summing', 'summer', 'adder amp', 'summing amp', 'adder amplifier'],
+    fields: ['Av'],
+    extract: (text) => { const Av = extractGain(text); return Av ? { Av } : {}; },
+    defaults: { Av: 1 },
+  },
   // Two-stage / multi-stage / cascaded amplifier. Before the generic 'amplifier'
   // fallback so "two-stage amplifier gain 100" is not grabbed as a single stage.
   {

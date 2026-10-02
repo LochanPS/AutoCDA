@@ -65,7 +65,7 @@ describe("simulatorAgent primitives (pure)", () => {
   });
 
   test("descriptor exists for each of the 10 supported types", () => {
-    const ids = ["rc_lowpass","rc_highpass","voltage_divider","led_limiter","common_emitter","band_pass","opamp_inverting","opamp_noninverting","zener_regulator","rc_oscillator","sallen_key_lowpass","sallen_key_highpass","two_stage_amplifier"];
+    const ids = ["rc_lowpass","rc_highpass","voltage_divider","led_limiter","common_emitter","band_pass","opamp_inverting","opamp_noninverting","zener_regulator","rc_oscillator","sallen_key_lowpass","sallen_key_highpass","two_stage_amplifier","opamp_summing","opamp_difference","rc_integrator","rc_differentiator"];
     for (const id of ids) expect(simDescriptor(id)).toBeDefined();
   });
 });

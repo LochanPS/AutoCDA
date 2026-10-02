@@ -40,6 +40,10 @@ export const SUPPORTED_TYPES = [
   { id: 'sallen_key_lowpass', name: 'Sallen-Key Low-Pass (2nd order)', fields: ['fc'] },
   { id: 'sallen_key_highpass', name: 'Sallen-Key High-Pass (2nd order)', fields: ['fc'] },
   { id: 'two_stage_amplifier', name: 'Two-Stage Amplifier', fields: ['Av'] },
+  { id: 'opamp_summing', name: 'Inverting Summing Amplifier', fields: ['Av'] },
+  { id: 'opamp_difference', name: 'Difference Amplifier', fields: ['Av'] },
+  { id: 'rc_integrator', name: 'Op-Amp Integrator', fields: ['fc'] },
+  { id: 'rc_differentiator', name: 'Op-Amp Differentiator', fields: ['fc'] },
 ];
 
 /** Default constraint values applied when a partial spec omits them. */

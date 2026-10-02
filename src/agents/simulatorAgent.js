@@ -19,7 +19,7 @@
  * @property {string[]} errors        real ngspice errors (notes/warnings dropped)
  */
 
-import { measureCutoff, measureGain, measureDC } from "../sim/measure";
+import { measureCutoff, measureGain, measureDC, measureUnityGainFreq } from "../sim/measure";
 
 // Plain decimal / scientific notation — ngspice-valid (never unit symbols).
 const num = (v) => Number(Number(v).toPrecision(6)).toString();
@@ -150,6 +150,38 @@ const SIM = {
     build: (v) =>
       `* two-stage non-inverting amplifier\nVin in 0 AC 1\nRg1 inv1 0 ${num(v.Rg1)}\nRf1 inv1 o1 ${num(v.Rf1)}\nE1 o1 0 in inv1 1e6\nRg2 inv2 0 ${num(v.Rg2)}\nRf2 inv2 o2 ${num(v.Rf2)}\nE2 o2 0 o1 inv2 1e6\n.ac lin 1 1000 1000\n.end`,
     measure: (r) => measureGain(r, "in", "o2"),
+  },
+  opamp_summing: {
+    targetName: "Av",
+    target: (t) => t.Av,
+    dominant: "Rf",
+    build: (v) =>
+      `* inverting summing amp (one input driven)\nV1 in 0 AC 1\nR1 in inv ${num(v.R1)}\nR2 0 inv ${num(v.R2)}\nRf inv out ${num(v.Rf)}\nE1 out 0 0 inv 1e6\n.ac lin 1 1000 1000\n.end`,
+    measure: (r) => measureGain(r, "in", "out"),
+  },
+  opamp_difference: {
+    targetName: "Av",
+    target: (t) => t.Av,
+    dominant: "Rf",
+    build: (v) =>
+      `* difference amp (V2 grounded)\nV1 in 0 AC 1\nR1 in inv ${num(v.R1)}\nRf inv out ${num(v.Rf)}\nR2 0 p ${num(v.R2)}\nRg p 0 ${num(v.Rg)}\nE1 out 0 p inv 1e6\n.ac lin 1 1000 1000\n.end`,
+    measure: (r) => measureGain(r, "in", "out"),
+  },
+  rc_integrator: {
+    targetName: "fc",
+    target: (t) => t.fc,
+    dominant: "R1",
+    build: (v, t) =>
+      `* op-amp integrator\nV1 in 0 AC 1\nR1 in inv ${num(v.R1)}\nC1 inv out ${num(v.C1)}\nE1 out 0 0 inv 1e6\n.ac dec 100 ${num(t.fc / 100)} ${num(t.fc * 100)}\n.end`,
+    measure: (r) => measureUnityGainFreq(r, "in", "out"),
+  },
+  rc_differentiator: {
+    targetName: "fc",
+    target: (t) => t.fc,
+    dominant: "R1",
+    build: (v, t) =>
+      `* op-amp differentiator\nV1 in 0 AC 1\nC1 in inv ${num(v.C1)}\nR1 inv out ${num(v.R1)}\nE1 out 0 0 inv 1e6\n.ac dec 100 ${num(t.fc / 100)} ${num(t.fc * 100)}\n.end`,
+    measure: (r) => measureUnityGainFreq(r, "in", "out"),
   },
   rc_oscillator: {
     targetName: "f",

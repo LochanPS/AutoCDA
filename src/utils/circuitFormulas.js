@@ -544,6 +544,115 @@ function twoStageAmplifier({ Av = 100 }) {
   };
 }
 
+function opampSumming({ Av = 1 }) {
+  // Inverting summing amplifier (2 inputs), per-input gain Av = Rf/Rin.
+  const Rin = 10000;
+  const Rf = Av * Rin;
+  const AvActual = Rf / Rin;
+  return {
+    id: 'opamp_summing', name: 'Inverting Summing Amplifier',
+    schematic: '/schematics/opamp_summing.svg',
+    simulationBadge: analyticalBadge(`Av = ${+AvActual.toPrecision(3)} / input`),
+    components: [
+      { ref: 'R1', rawValue: Rin, unit: 'Ω', display: formatResistance(Rin), description: 'Input 1 Resistor', editable: true },
+      { ref: 'R2', rawValue: Rin, unit: 'Ω', display: formatResistance(Rin), description: 'Input 2 Resistor', editable: true },
+      { ref: 'Rf', rawValue: Rf,  unit: 'Ω', display: formatResistance(Rf),  description: 'Feedback Resistor', editable: true },
+    ],
+    derivedParams: { Av: AvActual, inputs: 2 },
+    graph: { type: 'bar', title: 'Summing Amplifier — per-input gain',
+      data: [{ label: 'V1 gain', value: +AvActual.toFixed(2), color: '#58a6ff' }, { label: 'V2 gain', value: +AvActual.toFixed(2), color: '#58a6ff' }] },
+    processingSteps: [
+      '[✓] Input received: Inverting Summing Amplifier',
+      `[✓] Target per-input gain: ${+Av.toPrecision(3)}`,
+      '[✓] Formula: Vout = −Rf·(V1/R1 + V2/R2)', `[✓] R1 = R2 = ${formatResistance(Rin)}, Rf = ${formatResistance(Rf)}`,
+      ...analyticalSteps(`Av = ${+AvActual.toPrecision(3)} per input`),
+    ],
+    explanation: `Inverting summing amplifier: Vout = −Rf·(V1/R1 + V2/R2). With R1 = R2 = ${formatResistance(Rin)} and Rf = ${formatResistance(Rf)} each input is weighted by ${+AvActual.toPrecision(3)}. Verified by measuring one input's gain (the other grounded).`,
+    netlist: `Summing Amplifier — SPICE Netlist\n*AutoCDA Generated\nV1 in 0 AC 1\nR1 in inv ${formatResistance(Rin)}\nR2 0 inv ${formatResistance(Rin)}\nRf inv out ${formatResistance(Rf)}\nE1 out 0 0 inv 1e6\n.ac lin 1 1000 1000\n.end`,
+  };
+}
+
+function opampDifference({ Av = 1 }) {
+  // Difference amplifier, differential gain Av = Rf/R1 with matched resistors.
+  const R1 = 10000;
+  const Rf = Av * R1;
+  const AvActual = Rf / R1;
+  return {
+    id: 'opamp_difference', name: 'Difference Amplifier',
+    schematic: '/schematics/opamp_difference.svg',
+    simulationBadge: analyticalBadge(`Av = ${+AvActual.toPrecision(3)}`),
+    components: [
+      { ref: 'R1', rawValue: R1, unit: 'Ω', display: formatResistance(R1), description: 'Inverting Input Resistor', editable: true },
+      { ref: 'Rf', rawValue: Rf, unit: 'Ω', display: formatResistance(Rf), description: 'Feedback Resistor', editable: true },
+      { ref: 'R2', rawValue: R1, unit: 'Ω', display: formatResistance(R1), description: 'Non-Inv Input Resistor', editable: true },
+      { ref: 'Rg', rawValue: Rf, unit: 'Ω', display: formatResistance(Rf), description: 'Non-Inv Ground Resistor', editable: true },
+    ],
+    derivedParams: { Av: AvActual },
+    graph: { type: 'bar', title: 'Difference Amplifier gain (×)',
+      data: [{ label: 'Diff gain', value: +AvActual.toFixed(2), color: '#3fb950' }] },
+    processingSteps: [
+      '[✓] Input received: Difference Amplifier',
+      `[✓] Target gain: ${+Av.toPrecision(3)}`,
+      '[✓] Formula: Vout = (Rf/R1)(V2 − V1), matched resistors', `[✓] R1 = R2 = ${formatResistance(R1)}, Rf = Rg = ${formatResistance(Rf)}`,
+      ...analyticalSteps(`Av = ${+AvActual.toPrecision(3)}`),
+    ],
+    explanation: `Difference amplifier: Vout = (Rf/R1)(V2 − V1) with matched resistors (R2 = R1, Rg = Rf). Differential gain ${+AvActual.toPrecision(3)}. Verified by driving one input with the other grounded.`,
+    netlist: `Difference Amplifier — SPICE Netlist\n*AutoCDA Generated\nV1 in 0 AC 1\nR1 in inv ${formatResistance(R1)}\nRf inv out ${formatResistance(Rf)}\nR2 0 p ${formatResistance(R1)}\nRg p 0 ${formatResistance(Rf)}\nE1 out 0 p inv 1e6\n.ac lin 1 1000 1000\n.end`,
+  };
+}
+
+function rcIntegrator({ fc = 1000 }) {
+  // Op-amp integrator; fc = unity-gain (0 dB) frequency = 1/(2*pi*R*C).
+  const R = 10000;
+  const C = 1 / (2 * Math.PI * R * fc);
+  const fcActual = 1 / (2 * Math.PI * R * C);
+  return {
+    id: 'rc_integrator', name: 'Op-Amp Integrator',
+    schematic: '/schematics/rc_integrator.svg',
+    simulationBadge: analyticalBadge(`f0 = ${formatFrequency(fcActual)}`),
+    components: [
+      { ref: 'R1', rawValue: R, unit: 'Ω', display: formatResistance(R), description: 'Input Resistor', editable: true },
+      { ref: 'C1', rawValue: C, unit: 'F', display: formatCapacitance(C), description: 'Feedback Capacitor', editable: true },
+    ],
+    derivedParams: { fc: fcActual },
+    graph: { type: 'bode', title: `Op-Amp Integrator — unity-gain f0 = ${formatFrequency(fcActual)}`, xLabel: 'Frequency (Hz)', yLabel: 'Gain (dB)', cutoffFrequency: fcActual, filterType: 'lowpass' },
+    processingSteps: [
+      '[✓] Input received: Op-Amp Integrator',
+      `[✓] Target unity-gain frequency: ${formatFrequency(fc)}`,
+      '[✓] Formula: f0 = 1/(2π·R·C) (−20 dB/decade)', `[✓] R1 = ${formatResistance(R)}, C1 = ${formatCapacitance(C)}`,
+      ...analyticalSteps(`f0 = ${formatFrequency(fcActual)}`),
+    ],
+    explanation: `Inverting op-amp integrator: Vout = −(1/RC)∫Vin dt. Gain falls at −20 dB/decade and passes through unity (0 dB) at f0 = 1/(2π·R·C) = ${formatFrequency(fcActual)}. Verified by measuring the unity-gain frequency in SPICE.`,
+    netlist: `Op-Amp Integrator — SPICE Netlist\n*AutoCDA Generated\nV1 in 0 AC 1\nR1 in inv ${formatResistance(R)}\nC1 inv out ${formatCapacitance(C)}\nE1 out 0 0 inv 1e6\n.ac dec 100 ${(fcActual/100).toPrecision(4)} ${(fcActual*100).toPrecision(4)}\n.end`,
+  };
+}
+
+function rcDifferentiator({ fc = 1000 }) {
+  // Op-amp differentiator; fc = unity-gain (0 dB) frequency = 1/(2*pi*R*C).
+  const R = 10000;
+  const C = 1 / (2 * Math.PI * R * fc);
+  const fcActual = 1 / (2 * Math.PI * R * C);
+  return {
+    id: 'rc_differentiator', name: 'Op-Amp Differentiator',
+    schematic: '/schematics/rc_differentiator.svg',
+    simulationBadge: analyticalBadge(`f0 = ${formatFrequency(fcActual)}`),
+    components: [
+      { ref: 'C1', rawValue: C, unit: 'F', display: formatCapacitance(C), description: 'Input Capacitor', editable: true },
+      { ref: 'R1', rawValue: R, unit: 'Ω', display: formatResistance(R), description: 'Feedback Resistor', editable: true },
+    ],
+    derivedParams: { fc: fcActual },
+    graph: { type: 'bode', title: `Op-Amp Differentiator — unity-gain f0 = ${formatFrequency(fcActual)}`, xLabel: 'Frequency (Hz)', yLabel: 'Gain (dB)', cutoffFrequency: fcActual, filterType: 'highpass' },
+    processingSteps: [
+      '[✓] Input received: Op-Amp Differentiator',
+      `[✓] Target unity-gain frequency: ${formatFrequency(fc)}`,
+      '[✓] Formula: f0 = 1/(2π·R·C) (+20 dB/decade)', `[✓] C1 = ${formatCapacitance(C)}, R1 = ${formatResistance(R)}`,
+      ...analyticalSteps(`f0 = ${formatFrequency(fcActual)}`),
+    ],
+    explanation: `Inverting op-amp differentiator: Vout = −RC·dVin/dt. Gain rises at +20 dB/decade and passes through unity (0 dB) at f0 = 1/(2π·R·C) = ${formatFrequency(fcActual)}. Verified by measuring the unity-gain frequency in SPICE.`,
+    netlist: `Op-Amp Differentiator — SPICE Netlist\n*AutoCDA Generated\nV1 in 0 AC 1\nC1 in inv ${formatCapacitance(C)}\nR1 inv out ${formatResistance(R)}\nE1 out 0 0 inv 1e6\n.ac dec 100 ${(fcActual/100).toPrecision(4)} ${(fcActual*100).toPrecision(4)}\n.end`,
+  };
+}
+
 // ── main export ──────────────────────────────────────────────────────────────
 
 export function calculateCircuit(circuitId, params) {
@@ -562,6 +671,10 @@ export function calculateCircuit(circuitId, params) {
     case 'sallen_key_lowpass':  return sallenKeyLowpass(params);
     case 'sallen_key_highpass': return sallenKeyHighpass(params);
     case 'two_stage_amplifier': return twoStageAmplifier(params);
+    case 'opamp_summing':       return opampSumming(params);
+    case 'opamp_difference':    return opampDifference(params);
+    case 'rc_integrator':       return rcIntegrator(params);
+    case 'rc_differentiator':   return rcDifferentiator(params);
     default: return null;
   }
 }

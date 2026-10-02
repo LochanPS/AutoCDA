@@ -79,6 +79,31 @@ export function measureGain(result, inNode, outNode) {
 }
 
 /**
+ * Unity-gain (0 dB) frequency: the frequency where |outNode/inNode| crosses 1.
+ * For integrators (falling) and differentiators (rising) this is the 1/(2πRC)
+ * corner. Interpolated in log-frequency. Returns the first crossing, or null.
+ * @returns {number|null} frequency in Hz
+ */
+export function measureUnityGainFreq(result, inNode, outNode) {
+  const out = nodeMag(result, outNode);
+  const freq = result.sweep;
+  if (!out || out.length < 2 || !freq) return null;
+  const inMag = inNode ? nodeMag(result, inNode) : null;
+  const gain = out.map((v, i) => v / ((inMag && inMag[i]) || 1));
+  for (let i = 1; i < gain.length; i++) {
+    const a = gain[i - 1];
+    const b = gain[i];
+    if ((a <= 1 && b >= 1) || (a >= 1 && b <= 1)) {
+      if (a === b) return freq[i];
+      const t = (1 - a) / (b - a);
+      const logF = Math.log10(freq[i - 1]) + t * (Math.log10(freq[i]) - Math.log10(freq[i - 1]));
+      return Math.pow(10, logF);
+    }
+  }
+  return null;
+}
+
+/**
  * DC node value — the value at the last swept point (a single-point .dc or .op
  * yields one point).
  * @returns {number|null}

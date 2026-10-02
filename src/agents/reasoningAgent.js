@@ -58,6 +58,13 @@ const MONO = {
   opamp_noninverting: +1,
   common_emitter: -1,
   band_pass: -1,
+  sallen_key_lowpass: -1,
+  sallen_key_highpass: -1,
+  two_stage_amplifier: +1,
+  opamp_summing: +1,
+  opamp_difference: +1,
+  rc_integrator: -1,
+  rc_differentiator: -1,
 };
 
 /**
@@ -76,6 +83,10 @@ const JOINT_PAIR = {
   sallen_key_lowpass: ["R1", "R2"],
   sallen_key_highpass: ["R1", "R2"],
   two_stage_amplifier: ["Rf1", "Rf2"],
+  opamp_summing: ["Rf", "R1"],
+  opamp_difference: ["Rf", "R1"],
+  rc_integrator: ["R1", "C1"],
+  rc_differentiator: ["R1", "C1"],
   voltage_divider: ["R1", "R2"],
   opamp_inverting: ["Rf", "R1"],
   opamp_noninverting: ["Rf", "R1"],

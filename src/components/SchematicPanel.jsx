@@ -507,6 +507,64 @@ const FALLBACK_SVGS = {
   <circle cx="395" cy="100" r="4" fill="#1a7f42"/><text x="402" y="96" class="lbl" fill="#1a7f42">Vout</text>
   <text x="70" y="192" class="lbl" fill="#8b95a3">Two cascaded non-inverting stages (gain = g1 × g2)</text>
 </svg>`,
+
+  opamp_summing: `<svg viewBox="0 0 420 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
+  <text x="14" y="74" class="lbl" fill="#2f6feb">V1</text><line x1="30" y1="70" x2="60" y2="70" class="wire"/>
+  <polyline points="60,70 68,70 72,58 80,82 88,58 96,82 104,70 120,70" class="sym"/><text x="90" y="52" text-anchor="middle" class="lbl">{{R1}}</text>
+  <text x="14" y="124" class="lbl" fill="#2f6feb">V2</text><line x1="30" y1="120" x2="60" y2="120" class="wire"/>
+  <polyline points="60,120 68,120 72,108 80,132 88,108 96,132 104,120 120,120" class="sym"/><text x="90" y="102" text-anchor="middle" class="lbl">{{R2}}</text>
+  <line x1="120" y1="70" x2="170" y2="70" class="wire"/><line x1="120" y1="120" x2="170" y2="95" class="wire"/>
+  <circle cx="170" cy="95" r="3" fill="#2f6feb"/>
+  <polygon points="190,65 190,125 250,95" class="sym"/><text x="200" y="99" class="lbl">−</text><text x="222" y="99" class="lbl">U1</text>
+  <line x1="170" y1="95" x2="190" y2="95" class="wire"/>
+  <line x1="170" y1="95" x2="170" y2="40" class="wire"/><polyline points="170,40 190,40 194,28 202,52 210,28 218,52 226,40 300,40" class="sym"/><text x="235" y="30" text-anchor="middle" class="lbl">{{Rf}}</text>
+  <line x1="250" y1="95" x2="360" y2="95" class="wire"/><line x1="300" y1="40" x2="300" y2="95" class="wire"/>
+  <circle cx="335" cy="95" r="4" fill="#1a7f42"/><text x="342" y="91" class="lbl" fill="#1a7f42">Vout</text>
+  <text x="60" y="200" class="lbl" fill="#8b95a3">Vout = −Rf·(V1/R1 + V2/R2)</text>
+</svg>`,
+
+  opamp_difference: `<svg viewBox="0 0 420 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
+  <text x="14" y="74" class="lbl" fill="#2f6feb">V1</text><line x1="30" y1="70" x2="60" y2="70" class="wire"/>
+  <polyline points="60,70 68,70 72,58 80,82 88,58 96,82 104,70 120,70" class="sym"/><text x="90" y="52" text-anchor="middle" class="lbl">{{R1}}</text>
+  <circle cx="150" cy="70" r="3" fill="#2f6feb"/><line x1="120" y1="70" x2="190" y2="70" class="wire"/>
+  <text x="14" y="134" class="lbl" fill="#2f6feb">V2</text><line x1="30" y1="130" x2="60" y2="130" class="wire"/>
+  <polyline points="60,130 68,130 72,118 80,142 88,118 96,142 104,130 120,130" class="sym"/><text x="90" y="112" text-anchor="middle" class="lbl">{{R2}}</text>
+  <line x1="120" y1="130" x2="190" y2="110" class="wire"/>
+  <polygon points="190,50 190,130 255,90" class="sym"/><text x="200" y="74" class="lbl">−</text><text x="200" y="118" class="lbl">+</text><text x="226" y="94" class="lbl">U1</text>
+  <line x1="150" y1="70" x2="150" y2="36" class="wire"/><polyline points="150,36 170,36 174,24 182,48 190,24 198,48 206,36 300,36" class="sym"/><text x="235" y="26" text-anchor="middle" class="lbl">{{Rf}}</text>
+  <line x1="255" y1="90" x2="360" y2="90" class="wire"/><line x1="300" y1="36" x2="300" y2="90" class="wire"/>
+  <circle cx="335" cy="90" r="4" fill="#1a7f42"/><text x="342" y="86" class="lbl" fill="#1a7f42">Vout</text>
+  <text x="60" y="205" class="lbl" fill="#8b95a3">Vout = (Rf/R1)(V2 − V1)</text>
+</svg>`,
+
+  rc_integrator: `<svg viewBox="0 0 420 200" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
+  <text x="14" y="104" class="lbl" fill="#2f6feb">Vin</text><line x1="32" y1="100" x2="60" y2="100" class="wire"/>
+  <polyline points="60,100 68,100 72,88 80,112 88,88 96,112 104,100 150,100" class="sym"/><text x="90" y="82" text-anchor="middle" class="lbl">{{R1}}</text>
+  <circle cx="150" cy="100" r="3" fill="#2f6feb"/>
+  <polygon points="190,70 190,130 250,100" class="sym"/><text x="200" y="104" class="lbl">−</text><text x="222" y="104" class="lbl">U1</text>
+  <line x1="150" y1="100" x2="190" y2="100" class="wire"/>
+  <line x1="150" y1="100" x2="150" y2="44" class="wire"/>
+  <line x1="170" y1="36" x2="170" y2="52" class="sym" stroke-width="3"/><line x1="182" y1="36" x2="182" y2="52" class="sym" stroke-width="3"/><text x="176" y="28" text-anchor="middle" class="lbl">{{C1}}</text>
+  <line x1="150" y1="44" x2="170" y2="44" class="wire"/><line x1="182" y1="44" x2="300" y2="44" class="wire"/><line x1="300" y1="44" x2="300" y2="100" class="wire"/>
+  <line x1="250" y1="100" x2="360" y2="100" class="wire"/><circle cx="335" cy="100" r="4" fill="#1a7f42"/><text x="342" y="96" class="lbl" fill="#1a7f42">Vout</text>
+  <text x="60" y="185" class="lbl" fill="#8b95a3">Vout = −(1/RC)∫Vin dt</text>
+</svg>`,
+
+  rc_differentiator: `<svg viewBox="0 0 420 200" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background:transparent;max-height:100%;overflow:visible">
+  <defs><style>.lbl{font:11px 'JetBrains Mono',monospace;fill:#3a4552}.sym{stroke:#2f6feb;stroke-width:2;fill:none}.wire{stroke:#2f6feb;stroke-width:1.5;fill:none}</style></defs>
+  <text x="14" y="104" class="lbl" fill="#2f6feb">Vin</text><line x1="32" y1="100" x2="86" y2="100" class="wire"/>
+  <line x1="86" y1="86" x2="86" y2="114" class="sym" stroke-width="3"/><line x1="98" y1="86" x2="98" y2="114" class="sym" stroke-width="3"/><text x="92" y="78" text-anchor="middle" class="lbl">{{C1}}</text>
+  <line x1="98" y1="100" x2="150" y2="100" class="wire"/><circle cx="150" cy="100" r="3" fill="#2f6feb"/>
+  <polygon points="190,70 190,130 250,100" class="sym"/><text x="200" y="104" class="lbl">−</text><text x="222" y="104" class="lbl">U1</text>
+  <line x1="150" y1="100" x2="190" y2="100" class="wire"/>
+  <line x1="150" y1="100" x2="150" y2="44" class="wire"/><polyline points="150,44 170,44 174,32 182,56 190,32 198,56 206,44 300,44" class="sym"/><text x="235" y="34" text-anchor="middle" class="lbl">{{R1}}</text>
+  <line x1="300" y1="44" x2="300" y2="100" class="wire"/>
+  <line x1="250" y1="100" x2="360" y2="100" class="wire"/><circle cx="335" cy="100" r="4" fill="#1a7f42"/><text x="342" y="96" class="lbl" fill="#1a7f42">Vout</text>
+  <text x="60" y="185" class="lbl" fill="#8b95a3">Vout = −RC·dVin/dt</text>
+</svg>`,
 };
 
 /**
