@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import "./App.css";
 import SchematicPanel from "./components/SchematicPanel";
 import GraphPanel from "./components/GraphPanel";
@@ -14,7 +14,14 @@ import { designAndVerify } from "./design/loop";
 import { llmReasoningProposer } from "./agents/reasoningAgent";
 import { runSpice } from "./sim/spice";
 import { parseWithLLM } from "./parse/llmParser";
-import { buildBOM } from "./design/bom";
+import { buildBOM, buildBOMPriced } from "./design/bom";
+import { cached, makeMouserPriceSource } from "./design/distributorPricing";
+
+// Live pricing source (built once) when a proxy URL is configured; else null ->
+// the static catalog is used. The URL is non-secret; the key lives in the proxy.
+const BOM_PRICE_SOURCE = process.env.REACT_APP_PRICING_PROXY
+  ? cached(makeMouserPriceSource({ baseUrl: process.env.REACT_APP_PRICING_PROXY }))
+  : null;
 import { runToleranceSweep } from "./design/montecarlo";
 
 // Dev-only: register evaluation hooks (window.__yieldBench / __parserBench / __designBench).
@@ -523,6 +530,25 @@ function ResultSummary({ circuit }) {
         )}
       </div>
 
+      {v?.verifiable && v?.trace && v.trace.length > 0 && (() => {
+        const first = v.trace.find(t => t.errorPct != null);
+        const firstPct = first ? (first.errorPct * 100).toFixed(1) : null;
+        const bestPct = v.errorPct != null ? (v.errorPct * 100).toFixed(1) : null;
+        const usedSynth = v.trace.some(t => /synthesize/.test(t.rationale || ""));
+        const usedJoint = v.trace.some(t => /joint/.test(t.rationale || ""));
+        const usedTrim = v.trace.some(t => /E96/.test(t.rationale || ""));
+        const method = usedSynth ? "series/parallel synthesis" : usedJoint ? "joint two-component trim" : usedTrim ? "E96 resistor trim" : v.trace.length > 1 ? "feedback refinement" : "first-pass hit";
+        return (
+          <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)", padding: "9px 20px", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", fontSize: "var(--fs-xs)", color: "var(--text-2)" }}>
+            <span style={{ color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Reasoning loop</span>
+            <span className="tnum">{v.trace.length} SPICE eval{v.trace.length === 1 ? "" : "s"}</span>
+            {firstPct && bestPct && firstPct !== bestPct && <span className="tnum" style={{ color: "var(--text-3)" }}>· {firstPct}% → {bestPct}%</span>}
+            <span style={{ color: "var(--text-3)" }}>· {method}</span>
+            <span style={{ color: "var(--text-3)" }}>· see Details for the full trace</span>
+          </div>
+        );
+      })()}
+
       {parts.length > 0 && (
         <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)", padding: "10px 20px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Buyable parts</span>
@@ -720,8 +746,23 @@ function MonteCarloPanel({ circuit }) {
 // Bill of materials: buyable parts, MPNs, quantities, and total cost.
 function BomPanel({ circuit }) {
   const [open, setOpen] = useState(true);
-  const bom = React.useMemo(() => buildBOM(circuit.components), [circuit.components]);
+  const staticBom = React.useMemo(() => buildBOM(circuit.components), [circuit.components]);
+  const [bom, setBom] = useState(staticBom);
+  const [pricing, setPricing] = useState(BOM_PRICE_SOURCE ? "loading" : "static");
+
+  useEffect(() => {
+    setBom(staticBom);
+    if (!BOM_PRICE_SOURCE) { setPricing("static"); return; }
+    let live = true;
+    setPricing("loading");
+    buildBOMPriced(circuit.components, { source: BOM_PRICE_SOURCE })
+      .then((priced) => { if (live) { setBom(priced); setPricing(priced.livePriced ? "live" : "static"); } })
+      .catch(() => { if (live) setPricing("static"); });
+    return () => { live = false; };
+  }, [circuit.components, staticBom]);
+
   if (!bom.rows.length) return null;
+  const anyPriced = bom.rows.some((r) => r.priced);
 
   const th = { textAlign: "left", padding: "8px 18px", fontSize: "var(--fs-xs)", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, borderBottom: "1px solid var(--border)" };
   const thR = { ...th, textAlign: "right" };
@@ -735,7 +776,12 @@ function BomPanel({ circuit }) {
         style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", background: "transparent", border: "none", cursor: "pointer", fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}
       >
         <span>Bill of materials</span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: "12px" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>
+          <span style={{
+            fontSize: "var(--fs-xs)", fontWeight: 600, padding: "2px 8px", borderRadius: "999px",
+            background: pricing === "live" ? "var(--success-soft)" : "var(--surface-2)",
+            color: pricing === "live" ? "var(--success)" : "var(--text-3)",
+          }}>{pricing === "live" ? "Mouser live" : pricing === "loading" ? "pricing…" : "catalog"}</span>
           <span className="tnum" style={{ fontSize: "var(--fs-sm)", color: "var(--text-2)", fontWeight: 600 }}>${bom.total.toFixed(2)} / unit</span>
           <span style={{ color: "var(--text-3)", display: "inline-flex" }}><IconChevron dir={open ? "down" : "right"} /></span>
         </span>
@@ -750,6 +796,7 @@ function BomPanel({ circuit }) {
               <th style={thR}>Qty</th>
               <th style={thR}>Unit</th>
               <th style={thR}>Line</th>
+              {anyPriced && <th style={thR}>Stock</th>}
             </tr>
           </thead>
           <tbody>
@@ -759,8 +806,9 @@ function BomPanel({ circuit }) {
                 <td className="tnum" style={{ ...td, color: "var(--text)" }}>{r.value}</td>
                 <td style={{ ...td, fontFamily: "var(--font-mono)", color: "var(--text-2)", fontSize: "var(--fs-xs)" }}>{r.mpn}</td>
                 <td className="tnum" style={tdR}>{r.qty}</td>
-                <td className="tnum" style={tdR}>${r.unitPrice.toFixed(3)}</td>
+                <td className="tnum" style={{ ...tdR, color: r.priced ? "var(--success)" : undefined }}>${r.unitPrice.toFixed(3)}</td>
                 <td className="tnum" style={{ ...tdR, color: "var(--text)", fontWeight: 500 }}>${r.lineTotal.toFixed(3)}</td>
+                {anyPriced && <td className="tnum" style={{ ...tdR, color: "var(--text-3)", fontSize: "var(--fs-xs)" }}>{r.priced && r.stock != null ? r.stock.toLocaleString() : r.priced ? "—" : "catalog"}</td>}
               </tr>
             ))}
             <tr>
@@ -768,6 +816,7 @@ function BomPanel({ circuit }) {
                 <span style={{ fontWeight: 600 }}>Total per unit</span>
               </td>
               <td className="tnum" style={{ ...tdR, borderBottom: "none", color: "var(--text)", fontWeight: 700 }}>${bom.total.toFixed(3)}</td>
+              {anyPriced && <td style={{ ...td, borderBottom: "none" }} />}
             </tr>
           </tbody>
         </table>
