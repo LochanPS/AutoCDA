@@ -103,6 +103,20 @@ export function buildBOM(components) {
   return { rows, total: +total.toFixed(4) };
 }
 
+/**
+ * Build a BOM and enrich it with live distributor pricing when a price source is
+ * provided. Falls back to the static catalog per-row on any miss, so the BOM is
+ * always complete. With no source this is just buildBOM wrapped in a promise.
+ * @param {Array} components
+ * @param {{ source?: (mpn:string)=>Promise<Object|null> }} [opts]
+ */
+export async function buildBOMPriced(components, { source } = {}) {
+  const bom = buildBOM(components);
+  if (!source) return bom;
+  const { enrichBOMWithPricing } = await import("./distributorPricing");
+  return enrichBOMWithPricing(bom, source);
+}
+
 /** Serialise a BOM to CSV text (with a trailing total row). */
 export function buildBomCsv(bom) {
   const esc = (v) => {
