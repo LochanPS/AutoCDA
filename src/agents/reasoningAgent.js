@@ -30,7 +30,7 @@
  * without the wasm engine, and runs against real ngspice in the app/benchmark.
  */
 
-import { snap, neighbors, applyValue } from "../design/eseries";
+import { snap, neighbors, applyValue, synthesizeResistor } from "../design/eseries";
 import { simulatorAgent, dominantRef } from "./simulatorAgent";
 
 export const MAX_ITERATIONS = 6;
@@ -248,6 +248,7 @@ export async function reasoningAgent({
   maxIterations = MAX_ITERATIONS,
   fineTrim = true,
   jointTrim = true,
+  synth = true,
   runSpice,
   simulate,
   propose = secantProposer,
@@ -301,9 +302,14 @@ export async function reasoningAgent({
     if (baseVals[a] != null && baseVals[b] != null) {
       const aSeries = fineSeriesFor(unitOf(a));
       const bSeries = fineSeriesFor(unitOf(b));
+      // Scale the grid by how tight the tolerance is: a wide 9x9 search is only
+      // worth its simulation cost for sub-1% work; looser targets use a cheap 3x3.
+      const tight = tolerance <= 0.01;
+      const perSide = tight ? MAX_JOINT : 3;
+      const nbK = tight ? 4 : 1;
       const cands = (val, series) => {
         const s = snap(val, series);
-        return [...new Set([s, ...neighbors(val, series, 4)])].slice(0, MAX_JOINT);
+        return [...new Set([s, ...neighbors(val, series, nbK)])].slice(0, perSide);
       };
       const aCands = cands(finalVals[a], aSeries);
       const bCands = cands(finalVals[b], bSeries);
@@ -333,9 +339,46 @@ export async function reasoningAgent({
     }
   }
 
-  const finalComponents = snapped.map((c) =>
-    finalVals[c.ref] != null && finalVals[c.ref] !== c.rawValue ? applyValue(c, finalVals[c.ref]) : c
-  );
+  // Phase 4: series/parallel resistor synthesis for sub-tolerance precision.
+  // Realize a trim RESISTOR as two standard parts whose equivalent resistance is
+  // near-arbitrary (the combo's value set is effectively continuous), beating the
+  // single-part floor. SPICE sees the equivalent resistance, so no netlist change;
+  // the BOM lists the two parts. ~3 extra simulations, only when still short.
+  let synthesis = null;
+  if (synth && best && best.errorPct > tolerance) {
+    const sref = unitOf(dominant) === "F" ? "R1" : dominant;
+    if (unitOf(sref) === "Ω" && finalVals[sref] != null) {
+      const r0 = finalVals[sref];
+      const g0 = await grade({ valueMap: { ...finalVals, [sref]: r0 } });
+      const g1 = await grade({ valueMap: { ...finalVals, [sref]: r0 * 1.25 } });
+      const m0 = g0.measured, m1 = g1.measured, target = g0.target;
+      let idealR = null;
+      if (finite(m0) && finite(m1) && m0 > 0 && m1 > 0 && m0 !== m1) {
+        const p = Math.log(m1 / m0) / Math.log(1.25);
+        if (finite(p) && Math.abs(p) > 1e-6) idealR = r0 * Math.pow(target / m0, 1 / p);
+      }
+      if (finite(idealR) && idealR > 0) {
+        const syn = synthesizeResistor(idealR, "E96");
+        const gS = await grade({ valueMap: { ...finalVals, [sref]: syn.value } });
+        const eS = !finite(gS.measured) || !finite(gS.target) || gS.target === 0 ? null : Math.abs((gS.measured - gS.target) / gS.target);
+        trace.push({ ref: sref, value: syn.value, measured: gS.measured, errorPct: eS, rationale: `synthesize ${sref}=${syn.a}${syn.mode === "series" ? "+" : "∥"}${syn.b ?? ""} (${syn.mode})` });
+        if (eS != null && eS < best.errorPct) {
+          finalVals[sref] = syn.value;
+          best = { ref: sref, candidate: syn.value, measured: gS.measured, errorPct: eS };
+          if (syn.mode !== "single" && syn.b != null) synthesis = { ref: sref, ...syn };
+        }
+      }
+    }
+  }
+
+  const finalComponents = snapped.map((c) => {
+    if (finalVals[c.ref] != null && finalVals[c.ref] !== c.rawValue) {
+      const nc = applyValue(c, finalVals[c.ref]);
+      if (synthesis && synthesis.ref === c.ref) nc.synthesis = { mode: synthesis.mode, a: synthesis.a, b: synthesis.b };
+      return nc;
+    }
+    return c;
+  });
 
   return {
     dominant,

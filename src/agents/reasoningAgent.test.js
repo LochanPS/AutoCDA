@@ -74,6 +74,21 @@ describe("reasoningAgent — closed SPICE-grading loop", () => {
     }
   });
 
+  test("phase-4 resistor synthesis reaches sub-0.5% and records the pair", async () => {
+    const d = designerAgent({ type: "opamp_inverting", targets: { Av: 7 }, eSeries: "E24" });
+    const r = await reasoningAgent({
+      type: "opamp_inverting", targets: { Av: 7 }, snapped: d.snapped,
+      idealComponents: d.idealComponents, tolerance: 0.002, eSeries: "E24",
+      jointTrim: false, // isolate phase-4 synthesis from the joint grid
+      simulate: analyticSim("opamp_inverting", { Av: 7 }),
+    });
+    expect(r.converged).toBe(true);
+    expect(r.best.errorPct).toBeLessThanOrEqual(0.002);
+    const synthComp = r.finalComponents.find((c) => c.synthesis);
+    expect(synthComp).toBeTruthy();
+    expect(["series", "parallel"]).toContain(synthComp.synthesis.mode);
+  });
+
   test("is bounded: never exceeds the two-phase budget even on a hard target", async () => {
     const r = await runCase("rc_lowpass", { fc: 12345 }, 0.0001); // unreachable even on E96
     // coarse + fine single-variable phases, plus the bounded joint grid

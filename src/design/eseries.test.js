@@ -1,4 +1,4 @@
-import { E12, E24, E96, snap, neighbors } from "./eseries";
+import { E12, E24, E96, snap, neighbors, synthesizeResistor } from "./eseries";
 
 describe("E-series tables", () => {
   test("correct lengths", () => {
@@ -51,5 +51,28 @@ describe("neighbors()", () => {
 
   test("excludes the snapped value itself", () => {
     expect(neighbors(1000, "E24", 2)).not.toContain(1000);
+  });
+});
+
+describe("synthesizeResistor()", () => {
+  test("beats single-part snapping on an awkward target (sub-0.5%)", () => {
+    const target = 12345; // not near any E24 value
+    const single = snap(target, "E24");
+    const singleErr = Math.abs(single - target) / target;
+    const syn = synthesizeResistor(target, "E24");
+    expect(syn.errorPct).toBeLessThan(singleErr);
+    expect(syn.errorPct).toBeLessThan(0.005); // sub-0.5%
+    expect(["series", "parallel", "single"]).toContain(syn.mode);
+  });
+
+  test("series pair sums; parallel pair combines correctly", () => {
+    const syn = synthesizeResistor(3333, "E24");
+    if (syn.mode === "series") expect(syn.a + syn.b).toBeCloseTo(syn.value, 6);
+    if (syn.mode === "parallel") expect((syn.a * syn.b) / (syn.a + syn.b)).toBeCloseTo(syn.value, 6);
+  });
+
+  test("an exact E24 value needs no pair", () => {
+    const syn = synthesizeResistor(1000, "E24");
+    expect(syn.errorPct).toBeLessThan(1e-9);
   });
 });

@@ -74,9 +74,32 @@ function isOrderable(c) {
  * @param {Array<{ref, rawValue, unit, display, description}>} components
  * @returns {{ rows: Array<{ref, value, mpn, unitPrice, qty, lineTotal}>, total: number }}
  */
+// Expand a synthesized resistor (realized as two standard parts in series/parallel)
+// into its two orderable resistors so the BOM reflects what is actually bought.
+function expandSynthesis(components) {
+  const out = [];
+  for (const c of components || []) {
+    if (c.synthesis && c.synthesis.b != null && c.unit === "Ω") {
+      const { a, b, mode } = c.synthesis;
+      const mk = (suffix, val) => ({ ref: `${c.ref}${suffix}`, rawValue: val, unit: "Ω", display: formatOhms(val), description: `${c.description || "Resistor"} (${mode} pair)` });
+      out.push(mk("a", a), mk("b", b));
+    } else {
+      out.push(c);
+    }
+  }
+  return out;
+}
+
+// Local ohm formatter (avoids importing circuitFormulas into this pure module).
+function formatOhms(v) {
+  if (v >= 1e6) return `${+(v / 1e6).toPrecision(3)} MΩ`;
+  if (v >= 1e3) return `${+(v / 1e3).toPrecision(3)} kΩ`;
+  return `${+v.toPrecision(3)} Ω`;
+}
+
 export function buildBOM(components) {
   const groups = new Map();
-  for (const c of components || []) {
+  for (const c of expandSynthesis(components)) {
     if (!isOrderable(c)) continue;
     const kind = kindOf(c);
     const key = `${kind}|${c.rawValue ?? c.display}`;
@@ -123,11 +146,17 @@ export function buildBomCsv(bom) {
     const s = String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
+  const priced = (bom.rows || []).some((r) => r.priced);
   const header = ["Ref", "Value", "MPN", "Qty", "Unit Price (USD)", "Line Total (USD)"];
+  if (priced) header.push("Source", "Stock");
   const lines = [header.join(",")];
   for (const r of bom.rows) {
-    lines.push([r.ref, r.value, r.mpn, r.qty, r.unitPrice.toFixed(4), r.lineTotal.toFixed(4)].map(esc).join(","));
+    const row = [r.ref, r.value, r.mpn, r.qty, r.unitPrice.toFixed(4), r.lineTotal.toFixed(4)];
+    if (priced) row.push(r.priced ? (r.priceSource || "live") : "static", r.stock != null ? r.stock : "");
+    lines.push(row.map(esc).join(","));
   }
-  lines.push(["", "", "", "", "Total", bom.total.toFixed(4)].map(esc).join(","));
+  const totalRow = ["", "", "", "", "Total", bom.total.toFixed(4)];
+  if (priced) totalRow.push("", "");
+  lines.push(totalRow.map(esc).join(","));
   return lines.join("\n");
 }

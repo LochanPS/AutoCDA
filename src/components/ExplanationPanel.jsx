@@ -2,7 +2,13 @@ import React from "react";
 import { generateKicadSch } from "../utils/kicadExport";
 import { getCircuitJSUrl } from "../utils/circuitjs";
 import { downloadEasyEDAJson } from "../utils/easyedaschema";
-import { buildBOM, buildBomCsv } from "../design/bom";
+import { buildBOM, buildBOMPriced, buildBomCsv } from "../design/bom";
+import { cached, makeMouserPriceSource } from "../design/distributorPricing";
+
+// Live pricing source, built once if a proxy URL is configured (non-secret URL;
+// the distributor key lives only in that proxy). Falls back to the static catalog.
+const PRICING_PROXY = process.env.REACT_APP_PRICING_PROXY;
+const PRICE_SOURCE = PRICING_PROXY ? cached(makeMouserPriceSource({ baseUrl: PRICING_PROXY })) : null;
 
 export default function ExplanationPanel({ circuit, visible, expanded, onToggle }) {
   const downloadFile = (content, filename, mime) => {
@@ -32,9 +38,13 @@ export default function ExplanationPanel({ circuit, visible, expanded, onToggle 
     downloadEasyEDAJson(circuit);
   };
 
-  const handleExportBom = () => {
+  const handleExportBom = async () => {
     if (!circuit) return;
-    downloadFile(buildBomCsv(buildBOM(circuit.components)), `${circuit.id}_bom.csv`, "text/csv");
+    // Live distributor pricing when a proxy is configured; static catalog otherwise.
+    const bom = PRICE_SOURCE
+      ? await buildBOMPriced(circuit.components, { source: PRICE_SOURCE })
+      : buildBOM(circuit.components);
+    downloadFile(buildBomCsv(bom), `${circuit.id}_bom.csv`, "text/csv");
   };
 
   const isCollapsible = true; // Always collapsible in sidebar

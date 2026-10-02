@@ -11,7 +11,8 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "pricing-proxy": "node server/pricingProxy.js"
   },
   "browserslist": {
     "production": [

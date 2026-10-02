@@ -58,6 +58,57 @@ function tableFor(series) {
   return t;
 }
 
+// All standard values within [lo, hi] for a series (across decades).
+function valuesInRange(lo, hi, series) {
+  const table = tableFor(series);
+  const out = [];
+  const eLo = Math.floor(Math.log10(lo));
+  const eHi = Math.ceil(Math.log10(hi));
+  for (let e = eLo; e <= eHi; e++) {
+    const scale = Math.pow(10, e);
+    for (const m of table) {
+      const v = Number((m * scale).toPrecision(12));
+      if (v >= lo && v <= hi) out.push(v);
+    }
+  }
+  return out;
+}
+
+/**
+ * Synthesize a near-arbitrary resistance from TWO standard resistors in series or
+ * parallel — the textbook way to beat the single-part (~1%) granularity floor and
+ * reach sub-0.1%. Returns the best realization (and the single-part baseline if it
+ * is already closest).
+ * @param {number} target  desired resistance (ohms)
+ * @param {string} [series="E24"]
+ * @returns {{ value:number, mode:"single"|"series"|"parallel", a:number, b:number|null, errorPct:number }}
+ */
+export function synthesizeResistor(target, series = "E24") {
+  if (!(target > 0) || !isFinite(target)) return { value: target, mode: "single", a: target, b: null, errorPct: 0 };
+  const logErr = (v) => Math.abs(Math.log(v / target));
+  const single = snap(target, series);
+  let best = { value: single, mode: "single", a: single, b: null, errorPct: Math.abs(single - target) / target, _e: logErr(single) };
+  // Series: both parts <= target. Parallel: both parts >= target.
+  const lows = valuesInRange(target / 3, target * 1.001, series);
+  const highs = valuesInRange(target * 0.999, target * 3, series);
+  for (let i = 0; i < lows.length; i++) {
+    for (let j = i; j < lows.length; j++) {
+      const v = lows[i] + lows[j];
+      const e = logErr(v);
+      if (e < best._e) best = { value: +v.toPrecision(12), mode: "series", a: lows[i], b: lows[j], errorPct: Math.abs(v - target) / target, _e: e };
+    }
+  }
+  for (let i = 0; i < highs.length; i++) {
+    for (let j = i; j < highs.length; j++) {
+      const v = (highs[i] * highs[j]) / (highs[i] + highs[j]);
+      const e = logErr(v);
+      if (e < best._e) best = { value: +v.toPrecision(12), mode: "parallel", a: highs[i], b: highs[j], errorPct: Math.abs(v - target) / target, _e: e };
+    }
+  }
+  delete best._e;
+  return best;
+}
+
 /**
  * All standard values from the decade below `value` up to the decade above,
  * sorted ascending. Covers boundary cases (e.g. 9.5k snapping up to 10k).
