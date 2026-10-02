@@ -1,5 +1,5 @@
 import { designerAgent } from "./designerAgent";
-import { reasoningAgent, secantProposer, llmReasoningProposer, MAX_ITERATIONS } from "./reasoningAgent";
+import { reasoningAgent, secantProposer, llmReasoningProposer, MAX_ITERATIONS, MAX_JOINT } from "./reasoningAgent";
 
 // Analytic stand-in for SPICE: computes the measured scalar from the value map,
 // so the loop logic is tested deterministically without the wasm engine. The
@@ -76,7 +76,8 @@ describe("reasoningAgent — closed SPICE-grading loop", () => {
 
   test("is bounded: never exceeds the two-phase budget even on a hard target", async () => {
     const r = await runCase("rc_lowpass", { fc: 12345 }, 0.0001); // unreachable even on E96
-    expect(r.iterations).toBeLessThanOrEqual(2 * MAX_ITERATIONS); // coarse + fine phases
+    // coarse + fine single-variable phases, plus the bounded joint grid
+    expect(r.iterations).toBeLessThanOrEqual(2 * MAX_ITERATIONS + MAX_JOINT * MAX_JOINT);
     expect(r.best).not.toBeNull(); // still returns the best effort
   });
 });

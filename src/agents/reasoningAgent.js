@@ -34,6 +34,8 @@ import { snap, neighbors, applyValue } from "../design/eseries";
 import { simulatorAgent, dominantRef } from "./simulatorAgent";
 
 export const MAX_ITERATIONS = 6;
+// Per-side candidate cap for the joint two-component trim (grid is MAX_JOINT^2).
+export const MAX_JOINT = 9;
 
 /**
  * Sign of d(measured)/d(value) for each verifiable type's dominant component:
@@ -57,6 +59,29 @@ const MONO = {
   common_emitter: -1,
   band_pass: -1,
 };
+
+/**
+ * The two components whose JOINT choice sets the target, used by the optional
+ * sub-tolerance phase. A single standard part is only ~1% granular (E96 half-
+ * step ~1.15%); searching a pair's combined value set — which is far denser —
+ * reaches well below that. One of the pair is the dominant; the other is its
+ * partner in the governing equation. Single-resistor types (led, zener) have no
+ * partner and are left to the single-part floor.
+ */
+const JOINT_PAIR = {
+  rc_lowpass: ["R1", "C1"],
+  rc_highpass: ["R1", "C1"],
+  band_pass: ["R1", "C1"],
+  rc_oscillator: ["R1", "C1"],
+  voltage_divider: ["R1", "R2"],
+  opamp_inverting: ["Rf", "R1"],
+  opamp_noninverting: ["Rf", "R1"],
+  common_emitter: ["RC", "RE"],
+};
+
+// Finest realistic buyable series per component kind: resistors come in E96 (1%);
+// capacitors do not, so they stay on the coarser E24.
+const fineSeriesFor = (unit) => (unit === "F" ? "E24" : "E96");
 
 const valueMap = (components) => {
   const m = {};
@@ -221,6 +246,7 @@ export async function reasoningAgent({
   eSeries = "E24",
   maxIterations = MAX_ITERATIONS,
   fineTrim = true,
+  jointTrim = true,
   runSpice,
   simulate,
   propose = secantProposer,
@@ -260,6 +286,48 @@ export async function reasoningAgent({
       if (p2.best && (!best || p2.best.errorPct < best.errorPct)) {
         best = p2.best;
         finalVals[fineRef] = p2.best.candidate;
+      }
+    }
+  }
+
+  // Phase 3: joint two-component trim, only if still short and a partner exists.
+  // Searches a small grid of E-series neighbours of BOTH the dominant and its
+  // partner; the pair's combined value set is dense enough to beat the single-
+  // part floor (reaching sub-1%). Bounded to <= 25 simulations.
+  const pair = JOINT_PAIR[type];
+  if (jointTrim && pair && best && best.errorPct > tolerance) {
+    const [a, b] = pair;
+    if (baseVals[a] != null && baseVals[b] != null) {
+      const aSeries = fineSeriesFor(unitOf(a));
+      const bSeries = fineSeriesFor(unitOf(b));
+      const cands = (val, series) => {
+        const s = snap(val, series);
+        return [...new Set([s, ...neighbors(val, series, 4)])].slice(0, MAX_JOINT);
+      };
+      const aCands = cands(finalVals[a], aSeries);
+      const bCands = cands(finalVals[b], bSeries);
+      if (onStatus) onStatus(`Phase 3: joint trim of ${a}×${b} (${aCands.length}×${bCands.length} grid) for ${(tolerance * 100).toFixed(1)}%`);
+      let jbest = null;
+      for (const av of aCands) {
+        for (const bv of bCands) {
+          const vals = { ...finalVals, [a]: av, [b]: bv };
+          const sim = await grade({ valueMap: vals });
+          const measured = sim.measured;
+          const target = sim.target;
+          const errorPct =
+            !finite(measured) || !finite(target) || target === 0 ? null : Math.abs((measured - target) / target);
+          if (errorPct != null) {
+            trace.push({ ref: `${a}+${b}`, value: av, measured, errorPct, rationale: `joint: ${a}=${short(av)}, ${b}=${short(bv)}` });
+            if (jbest == null || errorPct < jbest.errorPct) jbest = { av, bv, measured, errorPct };
+          }
+          if (errorPct != null && errorPct <= tolerance) break;
+        }
+        if (jbest && jbest.errorPct <= tolerance) break;
+      }
+      if (jbest && jbest.errorPct < best.errorPct) {
+        finalVals[a] = jbest.av;
+        finalVals[b] = jbest.bv;
+        best = { ref: `${a}+${b}`, candidate: jbest.av, measured: jbest.measured, errorPct: jbest.errorPct };
       }
     }
   }

@@ -114,13 +114,20 @@ describe("ReasoningAgent robustness sweep (analytic models, all 8 types)", () =>
     expect(s.conv).toBe(s.n);
   }, 30000);
 
-  test("tol 1%: ~85%+ and every miss is still within 2% (single-part floor)", async () => {
-    // Below ~1% a single standard part cannot always land: the E96 half-step is
-    // ~1.15%. Reaching sub-1% reliably needs series/parallel resistor combos
-    // (future work). The loop still returns the best E96 part, so misses hug the
-    // floor rather than diverging.
+  test("tol 1%: 100% via the joint two-component trim (reliable sub-1%)", async () => {
+    // A single standard part is only ~1% granular (E96 half-step ~1.15%). The
+    // joint phase searches the dominant AND its partner together; their combined
+    // value set is dense enough to land every supported case under 1%.
     const s = await sweep(1, 0.01, 8);
-    expect(s.conv / s.n).toBeGreaterThanOrEqual(0.85);
-    expect(s.worst).toBeLessThan(0.02);
-  }, 30000);
+    expect(s.conv).toBe(s.n);
+    expect(s.worst).toBeLessThan(0.01);
+  }, 60000);
+
+  test("tol 0.5%: joint trim helps but sub-0.5% is not guaranteed (series/parallel is next)", async () => {
+    // Below ~0.5% the discrete joint grid runs out; true arbitrary precision
+    // needs series/parallel resistor synthesis. Documented, not over-claimed.
+    const s = await sweep(1, 0.005, 8);
+    expect(s.conv / s.n).toBeGreaterThanOrEqual(0.6);
+    expect(s.worst).toBeLessThan(0.012);
+  }, 60000);
 });
