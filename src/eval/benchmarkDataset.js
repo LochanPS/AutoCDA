@@ -18,7 +18,11 @@
  * Units: fc/fL/fH/f in Hz, V* in volts, I in amps, Av unitless.
  */
 
-export const DATASET = [
+import { generateDataset } from "./datasetGenerator";
+
+// The hand-written, hand-audited core. Programmatically generated cases are
+// appended below to form DATASET.
+const CURATED = [
   // ── rc_lowpass ──────────────────────────────────────────────────────────────
   { id: "lp1", prompt: "low pass filter 1kHz", type: "rc_lowpass", targets: { fc: 1000 }, difficulty: "easy", style: "canonical" },
   { id: "lp2", prompt: "design a low-pass filter with cutoff 2 kHz", type: "rc_lowpass", targets: { fc: 2000 }, difficulty: "easy", style: "canonical" },
@@ -181,6 +185,15 @@ export const DATASET = [
   { id: "amb2", prompt: "make it 3 times louder", type: "opamp_noninverting", targets: { Av: 3 }, difficulty: "hard", style: "ambiguous", llm: { type: "opamp_noninverting", targets: { Av: 3 }, confidence: 0.5 } },
   { id: "amb3", prompt: "a filter around 1 kHz", type: "band_pass", targets: { fL: 316, fH: 3162 }, difficulty: "hard", style: "ambiguous", llm: { type: "rc_lowpass", targets: { fc: 1000 }, confidence: 0.5 } },
 ];
+
+/**
+ * The full benchmark: the hand-audited core plus the programmatically generated
+ * cases (correct-by-construction labels). Deterministic, so the size is stable.
+ */
+export const DATASET = [...CURATED, ...generateDataset()];
+
+/** Just the hand-written core, for tests that want the curated subset. */
+export { CURATED };
 
 /** Group the dataset by expected type. */
 export function datasetByType() {
