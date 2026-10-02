@@ -3,7 +3,7 @@ AutoCDA — COMPLETE TECHNICAL DOSSIER
 Natural language  ->  buyable, SPICE-verified analog circuits
 Single-document record of the system, its capabilities, the evaluation work,
 patentability, and a conference-paper plan.
-Last updated: 2026-09-30
+Last updated: 2026-10-02  (see ADDENDUM at end for the 2026-10-02 changes)
 ================================================================================
 
 This document is written to be accurate, not promotional. Where a number comes
@@ -559,4 +559,76 @@ Session commits (most recent first):
   8938598  Fix common_emitter: bias-aware design (was saturating, ~98% error)
 
 Companion docs: PRODUCT.md, DESIGN.md, FEATURES.md, RESEARCH.txt.
+================================================================================
+
+
+================================================================================
+ADDENDUM — 2026-10-02  (changes since the body above)
+================================================================================
+The body above reflects the 2026-09-30 state (10 types, 106 cases, 75 tests).
+This session added the following; where the body and this addendum differ, the
+addendum is current.
+
+TYPES: now 11 (added sallen_key_lowpass). ALL 11 are SPICE-verified:
+  - zener_regulator: now verified (shunt-regulator DC test; was analytical-only).
+  - rc_oscillator: now verified (Wien network resonant peak via AC sweep; was
+    analytical-only). Transient oscillation is not relied upon (needs AGC
+    nonlinearity SPICE won't reliably converge on); the frequency-setting network's
+    peak is the honest, robust measurement.
+  - sallen_key_lowpass: NEW 2nd-order, unity-gain Butterworth topology. Four
+    coupled passives, no single-component closed form — the showcase for the loop.
+    Verified end-to-end (e.g. 1 kHz -> R1=R2=11k, C1=20n, C2=10n, measured 1023 Hz,
+    2.3% error at the 5% default, 1 iteration).
+
+DATASET: now 525 cases (was 106). Hand-audited core 118 + deterministic generator
+407 (datasetGenerator.js; correct-by-construction labels, style-tagged). Parsing
+study on the larger set: regex 65.5% / LLM 99.6% / combined 99.8% type accuracy
+(hard-subset 21.2 / 98.8 / 99.4).
+
+REASONING LOOP: default strategy is "reasoning" (was flipped from "grid"). Added:
+  - async proposer support (the LLM proposer now actually drives the loop) with a
+    deterministic secant fallback on any error, and E-series snapping of every
+    proposal; a cycle guard that ends a phase on a revisit.
+  - Phase 3 joint two-component trim -> reliable sub-1% (tol 1% convergence
+    85% -> 100%, worst-case 0.80%, analytic). Sub-0.5% still needs series/parallel
+    synthesis (stated, not claimed).
+
+LIVE LLM-IN-THE-LOOP: wired into the app (SpecCard "AI in the loop" toggle,
+key-gated; reasoning-trace panel shows per-step rationale). Deterministic path
+shown live (e.g. LED 30.8% -> 1.0% in 2 steps); LLM path mock-tested.
+
+SCHEMATIC HONESTY: schematic is now data-driven (labels from the real refined
+components), replacing the earlier stock-number drawing; recalculateFromComponents
+no longer hardcodes Vsupply.
+
+BOM: added a pluggable live distributor-pricing adapter (distributorPricing.js):
+PriceSource interface + cache + Digikey/Mouser proxy adapters (inert without a
+proxy URL; no key shipped) + enrichBOMWithPricing with per-row static fallback;
+buildBOMPriced in bom.js. Mock-tested; live needs a pricing proxy + credentials.
+
+TESTS: 85 passing across 11 suites (all offline, no key, no wasm). Parser
+hardening (comma/scientific/whitespace/op-amp/zero-volt) is covered by
+circuitParser.test.js.
+
+STATUS OF THE 6 FOLLOW-UP ITEMS:
+  [done] Sallen-Key / no-closed-form topology
+  [done] multi-component joint trim -> reliable sub-1%
+  [done] zener/oscillator SPICE verification
+  [done] live distributor BOM pricing (adapter; live needs a proxy+key)
+  [done] conference-paper draft (PAPER_DRAFT.txt)
+  [done] grow dataset 106 -> 525
+Still open (from the paper's [TODO]s): live-API parse/proposer numbers, a
+full-525 real-SPICE grid-vs-loop re-run, real user prompts, a baseline tool, and
+related-work citations.
+
+NEW/CHANGED FILES THIS SESSION:
+  src/agents/reasoningAgent.js (async propose, snap, cycle guard, joint phase)
+  src/agents/simulatorAgent.js (zener, oscillator, sallen-key descriptors)
+  src/utils/circuitFormulas.js (sallenKeyLowpass; target-aware recalc)
+  src/utils/circuitParser.js   (robustness fixes; sallen-key + op-amp keywords)
+  src/spec/circuitSpec.js      (11th type)
+  src/eval/datasetGenerator.js (NEW), benchmarkDataset.js (525)
+  src/design/distributorPricing.js (NEW), bom.js (buildBOMPriced)
+  src/components/SchematicPanel.jsx (data-driven), SpecCard.jsx (AI toggle), App.jsx
+  PAPER_DRAFT.txt (NEW)
 ================================================================================
