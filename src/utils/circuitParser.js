@@ -258,6 +258,40 @@ const CIRCUIT_PATTERNS = [
   },
 ];
 
+// ── constraint extraction (tolerance, E-series) ───────────────────────────────
+
+/**
+ * Pull design constraints out of the prompt: a tolerance like "25% tolerance",
+ * "tolerance of 2%", "within 1%", and an E-series like "E96"/"E24"/"E12". Returns
+ * only the constraints actually found, plus human-readable notes for the UI.
+ */
+function extractConstraints(text) {
+  const out = {};
+  const notes = [];
+
+  // tolerance: "tolerance of 25%", "25% tolerance", "within 2%", "to 5 %"
+  const tolM =
+    text.match(/tolerance\s*(?:of|=|:)?\s*(\d+(?:\.\d+)?)\s*%/i) ||
+    text.match(/(\d+(?:\.\d+)?)\s*%\s*tolerance/i) ||
+    text.match(/within\s*(\d+(?:\.\d+)?)\s*%/i);
+  if (tolM) {
+    const pct = parseFloat(tolM[1]);
+    if (pct > 0 && pct <= 100) {
+      out.tolerance = pct / 100;
+      notes.push(`tolerance ${pct}% (from prompt)`);
+    }
+  }
+
+  // E-series: E12 / E24 / E96 (word-boundaried so it doesn't catch "E960" etc.)
+  const esM = text.match(/\bE\s?(12|24|96)\b/i);
+  if (esM) {
+    out.eSeries = `E${esM[1]}`;
+    notes.push(`${out.eSeries} series (from prompt)`);
+  }
+
+  return { constraints: out, notes };
+}
+
 // ── main parse function ──────────────────────────────────────────────────────
 
 /**
@@ -271,6 +305,7 @@ const CIRCUIT_PATTERNS = [
 export function parsePrompt(text) {
   const clean = normalize(text);
   const lower = clean.toLowerCase();
+  const { constraints } = extractConstraints(clean);
 
   for (const pattern of CIRCUIT_PATTERNS) {
     const matched = pattern.keywords.some(kw => lower.includes(kw));
@@ -291,7 +326,7 @@ export function parsePrompt(text) {
     }
 
     const confidence = assumed.length === 0 ? 1.0 : 0.6;
-    return makeSpec({ type: pattern.id, targets, confidence, assumed });
+    return makeSpec({ type: pattern.id, targets, confidence, assumed, constraints });
   }
 
   // No keyword matched → unidentified circuit. type:null is intentionally not a

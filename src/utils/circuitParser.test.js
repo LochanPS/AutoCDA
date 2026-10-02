@@ -40,6 +40,23 @@ describe("circuitParser — number & format robustness", () => {
     expect(r.targets.Vout).toBe(3);
   });
 
+  test("parses tolerance and E-series constraints from the prompt", () => {
+    const r = parsePrompt("high pass filter at 6khz with a tolerance of 25% and runs on a E96");
+    expect(r.type).toBe("rc_highpass");
+    expect(r.targets.fc).toBe(6000);
+    expect(r.constraints.tolerance).toBeCloseTo(0.25, 6);
+    expect(r.constraints.eSeries).toBe("E96");
+    expect(r.confidence).toBe(1); // constraints don't lower confidence
+  });
+
+  test("constraint phrasings: '2% tolerance', 'within 1%', 'E24'", () => {
+    expect(parsePrompt("low pass 1kHz 2% tolerance").constraints.tolerance).toBeCloseTo(0.02, 6);
+    expect(parsePrompt("low pass 1kHz within 1%").constraints.tolerance).toBeCloseTo(0.01, 6);
+    expect(parsePrompt("low pass 1kHz on E24").constraints.eSeries).toBe("E24");
+    // no constraint phrasing -> defaults preserved
+    expect(parsePrompt("low pass 1kHz").constraints.tolerance).toBeCloseTo(0.05, 6);
+  });
+
   test("unknown/empty requests stay confidence 0 (no false positive)", () => {
     for (const p of ["filter", "make me a circuit", "555 timer 1kHz", "buck converter 5V"]) {
       expect(parsePrompt(p).confidence).toBe(0);

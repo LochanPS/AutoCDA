@@ -149,13 +149,22 @@ export default function SpecCard({ spec, onChange, onRun, onCancel, source = "fa
 
       <div style={{ display: "flex", gap: "10px" }}>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Tolerance</label>
-          <select value={spec.constraints.tolerance} onChange={(e) => handleConstraintChange("tolerance", parseFloat(e.target.value))} style={{ ...controlStyle, cursor: "pointer" }} onFocus={focusOn} onBlur={focusOff}>
-            <option value={0.01}>1%</option>
-            <option value={0.02}>2%</option>
-            <option value={0.05}>5%</option>
-            <option value={0.1}>10%</option>
-          </select>
+          <label style={labelStyle}>Tolerance (%)</label>
+          <input
+            type="number"
+            className="tnum"
+            min="0.1"
+            max="50"
+            step="0.1"
+            value={+(spec.constraints.tolerance * 100).toFixed(2)}
+            onChange={(e) => {
+              const pct = parseFloat(e.target.value);
+              handleConstraintChange("tolerance", pct > 0 ? pct / 100 : spec.constraints.tolerance);
+            }}
+            style={controlStyle}
+            onFocus={focusOn}
+            onBlur={focusOff}
+          />
         </div>
         <div style={{ flex: 1 }}>
           <label style={labelStyle}>E-series</label>
