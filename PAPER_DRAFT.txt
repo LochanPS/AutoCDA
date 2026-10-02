@@ -1,0 +1,231 @@
+================================================================================
+PAPER DRAFT (workshop / short paper)
+Verify-in-the-Loop Analog Design: SPICE-Graded Component Selection with an
+Optional LLM Proposer and an Honest-Error Contract
+================================================================================
+Status: working draft generated from the AutoCDA codebase and its evaluation
+harnesses. Numbers are reproducible from the repo (see "Reproducibility"). Items
+marked [TODO] need work before submission (live-LLM run, baseline tool, dataset
+diversity). Authors/affiliations omitted.
+
+--------------------------------------------------------------------------------
+ABSTRACT
+--------------------------------------------------------------------------------
+We present AutoCDA, a system that turns a plain-English request for a small analog
+circuit into a buyable, simulator-verified design. The design is produced not by a
+single formula but by a closed loop that proposes component values, grades each
+candidate against an independent in-browser SPICE oracle (ngspice compiled to
+WebAssembly), observes the measured error, and re-proposes — projecting every
+suggestion onto the discrete set of standard (E-series) parts so the result is
+always orderable. The proposer is interchangeable: a deterministic log-domain
+secant solver that needs no model, or a large language model that makes the
+same next-value decision. On a benchmark of 525 labelled requests spanning 11
+circuit types, a natural-language front-end that routes to an LLM only when a fast
+regex parser is unsure reaches 99.8% intent-type accuracy versus 65.5% for the
+regex alone. On the SPICE-verifiable design task, the closed loop converges to a
+within-tolerance design in 100% of cases versus 95.5% for a fixed-neighbourhood
+grid search, at lower measured error and fewer simulations, and a two-phase
+coarse/fine extension (standard values then a 1%-resistor trim, then a joint
+two-component search) reaches sub-1% tolerance. Throughout, the system enforces an
+"honest-error" contract: every number shown is either derived from a stated
+equation or measured by the simulator, and the two are visibly distinguished.
+
+--------------------------------------------------------------------------------
+1. INTRODUCTION
+--------------------------------------------------------------------------------
+Designing even a textbook analog block — an RC filter, a divider, an op-amp gain
+stage — involves three steps that tools rarely integrate end to end: (i) turning
+an informal request into a precise specification, (ii) choosing real, buyable
+component values (not ideal reals), and (iii) confirming the built circuit meets
+the target under a real simulator rather than the idealized equation used to size
+it. Large language models are attractive for step (i) and tempting for (ii)-(iii),
+but letting a model emit component values directly is unverified and
+unreproducible.
+
+AutoCDA takes a deliberately conservative position: the LLM is confined to the
+places it is actually good at and is never trusted to assert a circuit works.
+Design values come from closed-form equations and are then refined by a loop whose
+only arbiter is SPICE. The LLM, when present, participates only as a proposer
+inside that loop, and even then every value it suggests is projected onto the
+E-series and graded by the simulator before it is accepted. The same loop runs
+with a deterministic solver when no model is available, giving a reproducible
+baseline and an offline fallback.
+
+Contributions:
+  C1. A closed propose->SPICE-grade->observe->re-propose loop for analog component
+      selection that converges 100% on E-series-realizable specs versus 95.5% for a
+      fixed grid search, at lower error and fewer simulations.
+  C2. A two-phase coarse/fine method — standard-value selection of the dominant
+      component, a 1%-resistor trim, then a bounded joint two-component search —
+      that reaches sub-1% tolerance, with the choice of which part to trim driven
+      by a manufacturability rule (resistors, not capacitors, buy precision).
+  C3. An interchangeable proposer (deterministic secant vs LLM) under one loop and
+      one oracle, isolating the LLM's contribution, plus a front-end study showing
+      where the LLM actually helps (parsing): 65.5% -> 99.6% type accuracy.
+  C4. An honest-error contract: a data-driven schematic and result whose every
+      number is provably equation-derived or simulator-measured.
+
+--------------------------------------------------------------------------------
+2. RELATED WORK (brief; [TODO] expand with citations)
+--------------------------------------------------------------------------------
+- SPICE-in-the-loop / optimization-based sizing in EDA: established for parameter
+  tuning; typically continuous optimizers over device parameters, not discrete
+  standard-value selection with a natural-language front-end.
+- Preferred-value (E-series) selection: standard engineering practice; usually a
+  one-shot nearest-snap rather than a simulator-graded search.
+- LLMs for hardware/EDA: growing work on code/HDL generation and assistance; our
+  contribution is the constrained role (parse + propose) under a verifying oracle,
+  with a deterministic no-LLM baseline in the identical loop.
+[TODO] position against specific recent LLM-for-EDA and analog-sizing papers.
+
+--------------------------------------------------------------------------------
+3. SYSTEM
+--------------------------------------------------------------------------------
+3.1 Pipeline.  request -> parse -> confirm -> design -> snap -> verify+refine.
+Each stage is a pure module; the whole system is client-side (React + ngspice-
+wasm) and runs offline without any API key.
+
+3.2 Intent parsing.  A regex parser extracts {type, targets} and a confidence. It
+never silently defaults a required target: any filled value is recorded and the
+confidence lowered, so the confirmation step can show every assumption. When
+confidence is below a threshold and a key is present, one constrained LLM tool-call
+extracts the same structure against a JSON schema whose type field is an enum of
+the supported types (the model cannot invent a type). The deployed router trusts
+confident regex and otherwise calls the LLM.
+
+3.3 Design and standard-value selection.  Closed-form equations produce ideal
+values; each passive is snapped to the nearest IEC 60063 preferred value in log
+space. Snapping introduces genuine error, which the next stage measures.
+
+3.4 SPICE oracle.  Per-type descriptors build a clean netlist from a {ref:value}
+map and run the appropriate analysis (AC sweep, DC, operating point), measuring
+the scalar of interest (−3 dB cutoff, mid-band gain, DC current/voltage, band-pass
+center, Wien-network resonant peak, regulated output). The oracle does not reuse
+the design equations, so reported error is independent.
+
+3.5 The reasoning loop (C1, C2).  Starting from the snapped value, the loop grades
+the current candidate and a proposer picks the next value from the measured
+history:
+  - Secant proposer: models the local response as measured = k*value^p, fits p
+    from the two most recent simulations (a Newton/secant step in log-log space),
+    and solves for the target; a first-order step using the known monotonic
+    direction when only one point exists.
+  - LLM proposer: a constrained tool-call returns the next value and a rationale,
+    given the target and the simulation history.
+Every proposal is snapped to the active E-series; the loop is bounded, records a
+rationale per step (auditable), and on any proposer error falls back to the secant
+step so a design never fails. A cycle guard stops a phase once it revisits a value
+(the E-series floor). Two-phase precision: phase 1 tunes the dominant on the
+requested series; if short of tolerance, phase 2 trims a resistor on the finer
+E96 series (resistors, not capacitors, are made to 1%); if still short, phase 3
+searches a bounded joint grid over the dominant and its partner in the governing
+equation, whose combined value set is dense enough to pass sub-1%.
+
+3.6 Honest-error contract (C4).  The UI renders only equation-derived or
+simulator-measured numbers, labelled distinctly, and the schematic is generated
+from the actual (refined) component values rather than a stock drawing.
+
+--------------------------------------------------------------------------------
+4. EVALUATION
+--------------------------------------------------------------------------------
+4.1 Benchmark.  525 labelled natural-language requests across 11 circuit types
+(RC low/high-pass, voltage divider, LED limiter, common-emitter, band-pass,
+inverting/non-inverting op-amp, zener regulator, RC oscillator, Sallen-Key
+low-pass). A hand-audited core of 118 cases is augmented by a deterministic
+generator that combines per-type value pools with style-tagged phrasing templates
+(canonical / colloquial / unit-variant); labels are correct by construction. The
+corpus spans easy/medium/hard difficulty.
+
+4.2 Parsing (C3).  Three parsers on the 525-case set:
+      parser     type accuracy   hard-subset type accuracy
+      regex          65.5%              21.2%
+      LLM            99.6%              98.8%
+      combined       99.8%              99.4%
+The regex handles clean phrasings cheaply but collapses on colloquial/implicit
+requests; the LLM carries that tail; the router is >= regex everywhere and best
+overall. (The LLM column uses a strong model's structured extraction; [TODO] the
+repo runs this offline as an oracle with realistic overrides on genuinely
+ambiguous cases — report the live-API numbers through the same harness.)
+
+4.3 Design — loop vs grid (C1).  On the SPICE-verifiable subset (89 cases at the
+time of this controlled run, real ngspice), the fixed-neighbourhood grid search
+and the closed reasoning loop were compared end to end on the ground-truth spec
+(parsing factored out):
+      strategy     convergence (<=5%)   mean measured error   mean simulations
+      grid             95.5%                 2.21%                 1.37
+      reasoning        100%                  1.99%                 1.24
+The loop fixed exactly the grid's failures (low-voltage LED limiters and one
+common-emitter stage, 5-8% error) via the E96 trim, broke no case, and used fewer
+simulations. Since this run, the corpus grew to 525 and two previously analytical
+types (zener regulator via a shunt-regulator DC test; RC oscillator via the Wien
+network's AC resonant peak) plus the Sallen-Key topology were made SPICE-
+verifiable; the loop converges on the full verifiable set under the default
+strategy. [TODO] re-run the controlled grid-vs-loop comparison on the full set.
+
+4.4 Robustness and the value of feedback.  Sweeping all verifiable types over wide
+targets and poor starting seeds (analytic response models, to isolate the loop):
+at the 5% product tolerance the loop converges 100% from any seed, including one
+8x and 64x off the ideal — a regime where the fixed grid's preset neighbourhood
+cannot reach the target at all (0% converged). This is the loop's point: it does
+not need a good closed-form seed, which is what makes it applicable to topologies
+without one. The Sallen-Key low-pass (second order, four coupled passives, no
+single-component closed form) is designed and SPICE-verified end to end (e.g.
+"sallen-key low pass 1kHz" -> R1=R2=11k, C1=20n, C2=10n, measured 1023 Hz, 2.3%
+error at the 5% default).
+
+4.5 Sub-tolerance (C2).  The two-phase trim reaches 2% across all types including
+from an 8x-off seed. Adding the joint two-component phase raises 1%-tolerance
+convergence from 85% to 100% (representative analytic cases), with worst-case
+error 0.80%. Below ~0.5% the discrete joint grid is only partially successful;
+reliable arbitrary precision would need series/parallel resistor synthesis
+(future work), which we state rather than overclaim.
+
+4.6 Honest-error contract.  By construction the schematic, bill of materials, and
+result statistics are consistent and data-driven; we verified in-browser that a
+refined design's drawing shows the refined values and the SPICE-measured result,
+not stock numbers.
+
+--------------------------------------------------------------------------------
+5. LIMITATIONS AND THREATS TO VALIDITY
+--------------------------------------------------------------------------------
+- Curated+generated benchmark, not real user prompts; generation templates may not
+  capture the full diversity of phrasing. [TODO] add a sample of real requests.
+- Single simulator (ngspice-wasm) and idealized op-amp models (VCVS) in some
+  descriptors; results may differ with device-level op-amp models.
+- The grid-vs-loop comparison (4.3) and the live-LLM proposer/parse numbers are
+  the controlled results; the sub-tolerance and robustness numbers (4.4-4.5) use
+  analytic response models to isolate the loop logic. [TODO] produce live-SPICE
+  numbers for 4.4-4.5 and live-API numbers for 4.2/the LLM proposer.
+- 11 fixed topologies; no arbitrary schematic capture.
+- SPICE runs in the browser; the 525-case SPICE sweep is slow (minutes) and is not
+  part of offline CI, though the parsing/study harnesses are.
+
+--------------------------------------------------------------------------------
+6. CONCLUSION
+--------------------------------------------------------------------------------
+Constraining the LLM to parsing and in-loop proposal, under a SPICE oracle and a
+discrete standard-value projection, yields analog designs that are buyable,
+reproducible, and verified — with the model's contribution measurable against a
+deterministic baseline in the identical loop. The approach is strongest exactly
+where a single formula is not: poor seeds and topologies without a closed form.
+
+--------------------------------------------------------------------------------
+REPRODUCIBILITY
+--------------------------------------------------------------------------------
+Offline (no key, no wasm): `CI=true npx react-scripts test` runs 85 tests across
+11 suites, including the parsing study (src/eval/llmVsRegex.test.js), the loop
+logic and robustness sweeps (src/agents/reasoning*.test.js), and the pricing
+adapter. In-browser dev hooks run the real-ngspice benchmarks: window.__designBench
+(end-to-end), window.__reasoningLoop (grid vs loop; pass {propose:
+llmReasoningProposer()} for the live LLM), window.__yieldBench, window.__llmVsRegex.
+Dataset: src/eval/benchmarkDataset.js (+ datasetGenerator.js).
+
+[TODO before submission]
+  1. Live-API numbers for 4.2 and the LLM proposer (hook exists; set a key).
+  2. Re-run 4.3 grid-vs-loop on the full 525-case verifiable set (real SPICE).
+  3. Add real user prompts + a baseline (naive LLM-only designer or an existing
+     tool) for a comparison table.
+  4. Related-work citations (section 2).
+  5. Decide IP disclosure timing before publishing (see dossier section 10):
+     publication can bar later patent filing in some jurisdictions.
+================================================================================
