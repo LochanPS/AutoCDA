@@ -385,7 +385,7 @@ export default function App() {
             <div key={selectedCircuit.id + (selectedCircuit.verification?.iterations ?? "")} className="fade-in" style={{ display: "flex", flexDirection: "column", gap: "14px", minHeight: 0, flex: 1 }}>
               <ResultSummary circuit={selectedCircuit} />
               <Tabs active={activeTab} onChange={setActiveTab} />
-              <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
                 {activeTab === "schematic" && (
                   <SchematicPanel circuit={selectedCircuit} visible />
                 )}
@@ -396,7 +396,7 @@ export default function App() {
                   <CircuitJSPanel circuit={selectedCircuit} visible />
                 )}
                 {activeTab === "details" && (
-                  <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px", paddingRight: "4px" }}>
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px", paddingRight: "4px" }}>
                     <ComponentTable
                       circuit={selectedCircuit}
                       visible
