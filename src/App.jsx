@@ -45,15 +45,19 @@ const STATIC = {
 const INITIAL_MESSAGES = [
   {
     role: "system",
-    text: "Hi! Describe a circuit in plain English and I'll design it, then check it in a real simulator. Try one of the examples to see how it works.",
+    text: "Hi! Describe a circuit in plain English — 13 types including 2nd-order Sallen-Key filters and multi-stage amplifiers. You can set tolerance and E-series in words too (e.g. \"2% tolerance on E96\"). I design it, then verify it in a real SPICE simulator. Open the Details tab after a run to see the reasoning loop, bill of materials, and Monte-Carlo yield. Try an example:",
   },
 ];
 
 const EXAMPLES = [
   "Low-pass filter at 1 kHz",
+  "Sallen-Key low-pass 2 kHz",
+  "High-pass filter 6kHz, 2% tolerance on E96",
+  "Two-stage amplifier gain 100",
+  "Band-pass 300Hz to 3kHz",
   "Voltage divider 9V to 3.3V",
   "LED resistor for 20mA at 5V",
-  "Inverting amplifier gain 10",
+  "Zener regulator 12V to 5V",
 ];
 
 const TABS = [
