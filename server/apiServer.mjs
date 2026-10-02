@@ -18,6 +18,8 @@
  *   POST /api/parse    { prompt }          -> { type, targets, constraints, confidence, assumed }
  *   POST /api/verify   { prompt } | { type, targets, constraints?, strategy? }
  *                                          -> verified design + measured error + netlist + BOM
+ *   POST /api/compose  { stages:[{type,targets}] }
+ *                                          -> cascaded multi-stage circuit, measured end-to-end
  */
 import http from "node:http";
 import { orchestrate } from "../src/agents/orchestrator.js";
@@ -25,6 +27,7 @@ import { runSpice } from "../src/sim/spice.js";
 import { makeSpec, SUPPORTED_TYPES } from "../src/spec/circuitSpec.js";
 import { parsePrompt } from "../src/utils/circuitParser.js";
 import { buildBOM } from "../src/design/bom.js";
+import { composeCircuit, verifyComposition } from "../src/design/compose.js";
 
 const PORT = process.env.VERIFY_API_PORT || 3002;
 
@@ -103,6 +106,29 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true, service: "autocda-verify-api", types: SUPPORTED_TYPES.length });
   if (req.method === "GET" && url.pathname === "/api/types")
     return send(res, 200, SUPPORTED_TYPES.map((t) => ({ id: t.id, name: t.name, fields: t.fields })));
+
+  if (req.method === "POST" && url.pathname === "/api/compose") {
+    const body = await readBody(req);
+    if (body == null || !Array.isArray(body.stages)) return send(res, 400, { ok: false, error: "provide { stages: [{type, targets}] }" });
+    try {
+      const comp = composeCircuit(body.stages);
+      const v = await verifyComposition(comp, { runSpice });
+      const bom = buildBOM(comp.components);
+      return send(res, 200, {
+        ok: true,
+        stages: comp.stages,
+        predicted: comp.predicted,
+        measureKind: comp.measureKind,
+        measured: v.measured,
+        errors: v.errors,
+        components: comp.components.map((c) => ({ ref: c.ref, value: c.display, unit: c.unit, stage: c.stage })),
+        bom: { rows: bom.rows, total: bom.total },
+        netlist: comp.netlist,
+      });
+    } catch (e) {
+      return send(res, 422, { ok: false, error: String(e.message || e) });
+    }
+  }
 
   if (req.method === "POST" && (url.pathname === "/api/verify" || url.pathname === "/api/parse")) {
     const body = await readBody(req);
