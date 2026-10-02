@@ -111,8 +111,20 @@ const SIM = {
       `* band pass (HP then LP)\nV1 in 0 DC 0 AC 1\nC1 in a ${num(v.C1)}\nR1 a 0 ${num(v.R1)}\nR2 a out ${num(v.R2)}\nC2 out 0 ${num(v.C2)}\n.ac dec 100 ${num(t.fL / 100)} ${num(t.fH * 100)}\n.end`,
     measure: (r) => measurePeakFreq(r, "out"),
   },
-  // Oscillation frequency needs transient + zero-cross/FFT — unverifiable here.
-  zener_regulator: { verifiable: false },
+  zener_regulator: {
+    targetName: "Vz",
+    target: (t) => t.Vz,
+    dominant: "R1",
+    // Shunt regulator with a nominal 10 mA load. The zener model's breakdown is
+    // set to the target Vz; the measured output confirms the series R keeps the
+    // diode in regulation (if R1 is too large the output droops below Vz).
+    build: (v, t) => {
+      const RL = num((t.Vz || 5) / 0.01);
+      return `* zener shunt regulator\nVin in 0 DC ${num(t.Vin)}\nR1 in out ${num(v.R1)}\nDz 0 out ZD\nRL out 0 ${RL}\n.model ZD D(BV=${num(v.Dz)} IBV=0.005 RS=1)\n.dc Vin ${num(t.Vin)} ${num(t.Vin)} 1\n.end`;
+    },
+    measure: (r) => measureDC(r, "out"),
+  },
+  // Oscillation frequency needs a transient run + zero-cross period detection.
   rc_oscillator: { verifiable: false },
 };
 

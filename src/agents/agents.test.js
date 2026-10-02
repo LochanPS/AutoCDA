@@ -27,8 +27,8 @@ describe("designerAgent", () => {
 describe("simulatorAgent primitives (pure)", () => {
   test("isVerifiable reflects the descriptor table", () => {
     expect(isVerifiable("rc_lowpass")).toBe(true);
-    expect(isVerifiable("rc_oscillator")).toBe(false);
-    expect(isVerifiable("zener_regulator")).toBe(false);
+    expect(isVerifiable("zener_regulator")).toBe(true); // now SPICE-verified
+    expect(isVerifiable("rc_oscillator")).toBe(false);  // transient/FFT — still analytical
     expect(isVerifiable("banana")).toBe(false);
   });
 
