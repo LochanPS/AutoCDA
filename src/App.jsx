@@ -209,8 +209,15 @@ export default function App() {
   const [toast, setToast] = useState("");
 
   const inputRef = useRef(null);
+  const mainRef = useRef(null);
   const toastTimer = useRef(null);
   const hashHandled = useRef(false);
+
+  // A new result can be taller than the viewport now that the result column
+  // scrolls — land at the top (title + measured stats) rather than mid-page.
+  useEffect(() => {
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+  }, [selectedCircuit]);
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -557,7 +564,7 @@ export default function App() {
         </aside>
 
         {/* Main: running, welcome, or verified results */}
-        <main className="app-main" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <main ref={mainRef} className="app-main" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
           {loading ? (
             <RunningState steps={logSteps} />
           ) : !selectedCircuit ? (
@@ -567,7 +574,7 @@ export default function App() {
               resetKey={selectedCircuit.id + (selectedCircuit.verification?.iterations ?? "")}
               onReset={() => { setSelectedCircuit(null); setActiveTab("schematic"); }}
             >
-            <div key={selectedCircuit.id + (selectedCircuit.verification?.iterations ?? "")} className="fade-in" style={{ display: "flex", flexDirection: "column", gap: "14px", minHeight: 0, flex: 1 }}>
+            <div key={selectedCircuit.id + (selectedCircuit.verification?.iterations ?? "")} className="fade-in result-view" style={{ display: "flex", flexDirection: "column", gap: "14px", minHeight: 0, flex: 1 }}>
               <ResultSummary circuit={selectedCircuit} />
               <DesignActions onShare={handleShare} onSave={handleSaveDesign} toast={toast} />
               {lastChange && <BeforeAfter change={lastChange} />}
@@ -579,7 +586,7 @@ export default function App() {
                 disabled={loading}
               />
               <Tabs active={activeTab} onChange={setActiveTab} />
-              <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+              <div className="tab-pane" style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
                 {activeTab === "schematic" && (
                   <SchematicPanel circuit={selectedCircuit} visible />
                 )}
@@ -668,8 +675,10 @@ function statusOf(v) {
 function StatusBadge({ v, size = "sm" }) {
   const s = statusOf(v);
   const pad = size === "sm" ? "4px 10px" : "5px 12px";
+  // Crisp outlined chip (1px border in the status color) rather than a heavy
+  // solid-green fill — reads cleaner and less loud.
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "var(--fs-xs)", fontWeight: 600, color: s.color, background: s.soft, padding: pad, borderRadius: "999px" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "var(--fs-xs)", fontWeight: 600, color: s.color, background: "transparent", border: `1px solid ${s.color}`, padding: pad, borderRadius: "999px" }}>
       {s.Icon ? <s.Icon size={13} /> : <span className="pulse-dot" style={{ background: "currentColor" }} />}
       {s.label}
     </span>
@@ -718,7 +727,7 @@ function Header({ verification, mode, onMode }) {
         </div>
       </div>
       {onMode && <ModeTabs mode={mode} onMode={onMode} />}
-      {verification?.verifiable ? <StatusBadge v={verification} size="md" /> : <span style={{ width: "1px" }} />}
+      <span style={{ width: "1px" }} />{/* status shown under the result title, not duplicated here */}
     </header>
   );
 }

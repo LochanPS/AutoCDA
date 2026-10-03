@@ -90,6 +90,15 @@ input, select { font-family: inherit; transition: border-color 160ms var(--ease)
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
 
+/* Result column scrolls instead of cramming everything into one locked viewport.
+   The tab panel (schematic / response / live sim / details) gets a comfortable
+   fixed height so the schematic is large and readable. */
+.app-main { overflow-y: auto; }
+/* Let the result column size to its content (don't stretch to the viewport),
+   so a tall schematic makes the column scroll rather than squeezing the summary. */
+.result-view { flex: 0 0 auto !important; min-height: 0; padding-bottom: 8px; }
+.tab-pane { flex: 0 0 auto !important; height: clamp(360px, 56vh, 580px); }
+
 /* Mobile-first shell: stack the desktop two-column layout on narrow screens.
    The landing/results column (main) comes first; the describe sidebar below. */
 @media (max-width: 720px) {

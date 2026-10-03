@@ -68,17 +68,18 @@ unthrottled). The **same image runs on any container host** — pick one below.
 The API is **stateless per request**, so it does not *need* an always-on
 instance; scale-to-zero is fine and usually free at low volume.
 
-### Where to host (durable, not time-limited)
+### Where to host
 
-| Host | Cost | Model | Notes |
+| Host | Card required? | Cost | Notes |
 |---|---|---|---|
-| **Oracle Cloud Always Free** | Free forever | ARM VM (up to 4 vCPU / 24 GB) | Truly free, you own the box. Run `docker` + Caddy for TLS. |
-| **Google Cloud Run** | ~$0 low traffic (2M req/mo free) | Scale-to-zero container | Managed, no expiry. Deploys this Dockerfile as-is. Cold start loads the ~20 MB engine (≈1–2 s first hit). |
-| **Fly.io** | Small free allowance (card required) | Always-on or scale-to-zero | `fly launch --dockerfile`. |
-| **Koyeb** | 1 free web service | Always-on container | Simplest always-on free tier. |
-| **Hugging Face Spaces (Docker SDK)** | Free | Always-on-ish | Good for a public demo. |
-| **Render** | Free tier is time-limited | Spins down when idle | Works, but not durable — avoid for long-term. |
+| **Hugging Face Spaces (Docker SDK)** | **No** | Free | **Recommended if you have no card.** Runs this Dockerfile; keeps the real server (rate-limiting works). Sleeps after ~48 h idle, wakes on request. |
+| **Render** | **No** | Free (time-limited / idle spin-down) | No card, but not durable. |
+| **Google Cloud Run** | Yes (Visa/MC/Amex) | ~$0 low traffic (2M req/mo free) | Managed, no expiry. Best if you *can* add a card. |
+| **Oracle Cloud Always Free** | Yes (card to verify) | Free forever | ARM VM, you own the box. |
+| **Fly.io / Koyeb** | Yes | Small free allowance | `fly launch --dockerfile`. |
 
+> **No Visa/Mastercard?** Cloud Run, Oracle, Fly all require a card even for free
+> tiers. Use **Hugging Face Spaces** (below) — no card, runs the same image.
 > Free tiers change often — verify current limits before committing.
 
 ### Caveats (what the free setup does *not* do)
@@ -97,7 +98,22 @@ instance; scale-to-zero is fine and usually free at low volume.
 
 ### Deploy quickstarts (same image)
 
-**Google Cloud Run** (managed, no expiry):
+**Hugging Face Spaces — no credit card** (recommended when you have no card):
+1. huggingface.co → sign up (free, no card) → **New Space** → **SDK: Docker** → **Blank** → Public.
+2. Clone the Space repo and copy these into it (keep the auto-generated `README.md`, which has `sdk: docker`):
+   `Dockerfile`, `.dockerignore`, `package.json`, `package-lock.json`, `server/`, `src/`.
+3. Space → **Settings → Variables and secrets** → add:
+   - `PORT = 7860`  (HF serves the app on port 7860)
+   - `CORS_ORIGIN = https://auto-cda-phi.vercel.app`
+   - optional: `API_KEYS`, `ANON_RATE_LIMIT`, etc.
+4. `git push` the Space → HF builds the Docker image → live at `https://<user>-<space>.hf.space`.
+5. Smoke test: `curl https://<user>-<space>.hf.space/api/health`
+
+> HF free Spaces sleep after ~48 h idle and cold-start (loads the ~20 MB engine,
+> ≈1–2 s on the first request after waking). In-memory rate/usage counts reset on
+> each wake — fine for a free public API.
+
+**Google Cloud Run** (managed, no expiry — needs a card):
 ```bash
 gcloud run deploy autocda-api --source . \
   --allow-unauthenticated --region <region> \
