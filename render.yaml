@@ -6,7 +6,9 @@ services:
     name: autocda-verify-api
     runtime: node
     plan: free
-    buildCommand: npm ci
+    # npm install (not `npm ci`): tolerant of lockfile/npm-version drift between
+    # the local npm 11 lockfile (lockfileVersion 3) and Render's bundled npm.
+    buildCommand: npm install --no-audit --no-fund
     startCommand: npm run verify-api
     healthCheckPath: /api/health
     autoDeploy: true

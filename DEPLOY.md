@@ -144,7 +144,7 @@ docker run -d --restart unless-stopped -p 3002:3002 \
 ```
 
 **Render — free Node web service, no card, no Docker** (recommended no-card path):
-A `render.yaml` blueprint is committed (runtime `node`, `npm ci` / `npm run verify-api`,
+A `render.yaml` blueprint is committed (runtime `node`, `npm install` / `npm run verify-api`,
 health check `/api/health`, free plan).
 1. render.com → sign up with GitHub (no card).
 2. **New + → Blueprint** → pick `LochanPS/AutoCDA` → Render reads `render.yaml` → **Apply**.
