@@ -20,7 +20,7 @@
  */
 
 import { calculateCircuit } from "../utils/circuitFormulas";
-import { simDescriptor } from "../agents/simulatorAgent";
+import { simDescriptor, circuitOutNode } from "../agents/simulatorAgent";
 import { measureCutoff, measureGain } from "../sim/measure";
 
 // Node-terminal count by element first letter (how many leading tokens are nodes).
@@ -33,7 +33,7 @@ const gainOf = (c) => (c && c.derivedParams && typeof c.derivedParams.Av === "nu
 // element's type letter first, or ngspice mis-types it — e.g. a prefixed "S1_R1"
 // reads as a switch), map `in`/`out` to the chain nets, keep ground (0),
 // namespace every other node, and leave trailing model names alone.
-function remapLine(line, inNet, outNet, s) {
+function remapLine(line, inNet, outNet, s, outTok = "out") {
   const toks = line.trim().split(/\s+/);
   const el = toks[0];
   const n = NODE_COUNT[el[0].toUpperCase()] || 2;
@@ -42,7 +42,10 @@ function remapLine(line, inNet, outNet, s) {
     const node = toks[i];
     if (node === "0") continue;
     else if (node === "in") toks[i] = inNet;
-    else if (node === "out") toks[i] = outNet;
+    // A stage may drive its output onto its own node name (e.g. two_stage uses
+    // "o2", common_emitter uses "col"), not the literal "out"; map that to the
+    // chain net so the next stage is actually connected (else n<i> floats).
+    else if (node === "out" || node === outTok) toks[i] = outNet;
     else toks[i] = `S${s}_${node}`;
   }
   return toks.join(" ");
@@ -83,13 +86,14 @@ export function composeCircuit(stages, { eSeries = "E24" } = {}) {
     // Source the stage's raw netlist from its SPICE descriptor when available
     // (clean, node-consistent), else from the circuit's own netlist field.
     const desc = simDescriptor(d.type);
+    const outTok = circuitOutNode(d.type);
     const valueMap = {};
     d.circuit.components.forEach((c) => { if (c.rawValue != null) valueMap[c.ref] = c.rawValue; });
     const raw = desc && desc.build ? desc.build(valueMap, d.targets || {}) : "";
     for (const line of raw.split("\n")) {
       if (isComment(line) || isAnalysis(line) || isStimulus(line)) continue;
       if (isModel(line)) { const name = line.trim().split(/\s+/)[1]; if (!models.has(name)) models.set(name, line.trim()); continue; }
-      if (line.trim()) elementLines.push(remapLine(line, inNet, outNet, i + 1));
+      if (line.trim()) elementLines.push(remapLine(line, inNet, outNet, i + 1, outTok));
     }
   });
 
@@ -132,5 +136,5 @@ export async function verifyComposition(composition, { runSpice }) {
     composition.measureKind === "cutoff"
       ? measureCutoff(result, composition.measureNode)
       : measureGain(result, "in", composition.measureNode);
-  return { measured, measureKind: composition.measureKind, errors: (result.errors || []).filter((e) => !/^\s*(note|warning)/i.test(e)) };
+  return { measured, measureKind: composition.measureKind, result, errors: (result.errors || []).filter((e) => !/^\s*(note|warning)/i.test(e)) };
 }

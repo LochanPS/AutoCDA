@@ -99,6 +99,7 @@ const SIM = {
     targetName: "Av",
     target: (t) => t.Av,
     dominant: "RE",
+    outNode: "col",
     build: (v) =>
       `* common emitter\nVCC vcc 0 DC 12\nVin in 0 DC 0 AC 1\nR1 vcc base ${num(v.R1)}\nR2 base 0 ${num(v.R2)}\nRC vcc col ${num(v.RC)}\nRE emit 0 ${num(v.RE)}\nC1 in base 10u\nQ1 col base emit QN\n.model QN NPN(Bf=200 Is=1e-14)\n.ac lin 1 1000 1000\n.end`,
     measure: (r) => measureGain(r, "in", "col"),
@@ -146,6 +147,7 @@ const SIM = {
     targetName: "Av",
     target: (t) => t.Av,
     dominant: "Rf1",
+    outNode: "o2",
     // Two cascaded ideal non-inverting stages (VCVS op-amps); measure end-to-end gain.
     build: (v) =>
       `* two-stage non-inverting amplifier\nVin in 0 AC 1\nRg1 inv1 0 ${num(v.Rg1)}\nRf1 inv1 o1 ${num(v.Rf1)}\nE1 o1 0 in inv1 1e6\nRg2 inv2 0 ${num(v.Rg2)}\nRf2 inv2 o2 ${num(v.Rf2)}\nE2 o2 0 o1 inv2 1e6\n.ac lin 1 1000 1000\n.end`,
@@ -217,6 +219,12 @@ const SIM = {
 /** Descriptor for a type (internal). */
 export function simDescriptor(type) {
   return SIM[type];
+}
+
+/** The node a stage drives its output onto in its own deck (default "out"). */
+export function circuitOutNode(type) {
+  const d = SIM[type];
+  return (d && d.outNode) || "out";
 }
 
 /** Whether this circuit type has a real SPICE measurement path. */

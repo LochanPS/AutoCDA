@@ -1,0 +1,17 @@
+node_modules
+build
+.git
+.env
+.env.*
+*.log
+scratchpad
+.claude
+docs
+public
+coverage
+*.md
+AUTOCDA_TECHNICAL_DOSSIER.txt
+PAPER_DRAFT.txt
+RESEARCH.txt
+generate_schematics.py
+run.bat

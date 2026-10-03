@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AutoCDA API — Docs</title>
+<meta name="description" content="Public API for AutoCDA: POST a circuit intent, get a SPICE-verified, buyable design." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#f7f8fa;--surface:#fff;--surface-2:#f1f3f6;--border:#e3e7ec;--border-strong:#cfd6de;
+    --text:#161b22;--text-2:#5a6472;--text-3:#8b95a3;--accent:#4557d6;--accent-hover:#3646c0;
+    --accent-soft:#e6e9fb;--success:#1a7f4b;--success-soft:#daf1e4;--warn:#8a6100;--warn-soft:#fbf0d3;--danger:#c3352b;
+    --r-sm:8px;--r:12px;--shadow-sm:0 1px 2px rgba(22,27,34,.06),0 1px 3px rgba(22,27,34,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  code,pre,.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{color:var(--accent-hover);text-decoration:underline}
+  .wrap{max-width:860px;margin:0 auto;padding:32px 16px 96px}
+  header.hero{padding:16px 0 8px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px}
+  .brand svg{color:var(--accent)}
+  h1{font-size:1.75rem;font-weight:700;letter-spacing:-.01em;margin:20px 0 6px}
+  .lede{color:var(--text-2);font-size:1.0625rem;max-width:60ch}
+  .badge{display:inline-flex;align-items:center;gap:6px;background:var(--success-soft);color:var(--success);
+    font-size:.75rem;font-weight:600;padding:4px 10px;border-radius:999px;margin-top:14px}
+  .badge .dot{width:7px;height:7px;border-radius:999px;background:var(--success)}
+  h2{font-size:1.0625rem;font-weight:600;margin:40px 0 10px;padding-top:16px;border-top:1px solid var(--border)}
+  h3{font-size:.95rem;font-weight:600;margin:22px 0 8px}
+  p{color:var(--text-2);margin:8px 0}
+  p strong,li strong{color:var(--text)}
+  ul{margin:8px 0 8px 18px;color:var(--text-2)}
+  li{margin:3px 0}
+  pre{background:#0f1420;color:#e6e9f0;border-radius:var(--r);padding:14px 16px;overflow:auto;font-size:12.5px;line-height:1.5;margin:10px 0}
+  pre .k{color:#8aa0ff}.pre .s{color:#9ece6a}
+  code.inline{background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:12.5px;color:var(--text)}
+  .ep{display:flex;align-items:center;gap:10px;margin:6px 0;flex-wrap:wrap}
+  .m{font-weight:600;font-size:.72rem;padding:3px 8px;border-radius:6px;letter-spacing:.03em}
+  .m.get{background:var(--accent-soft);color:var(--accent)}
+  .m.post{background:var(--success-soft);color:var(--success)}
+  .path{font-family:"JetBrains Mono",monospace;font-weight:500;font-size:13px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--text-3);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}
+  td.mono,td code{font-family:"JetBrains Mono",monospace}
+  .tier{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px;box-shadow:var(--shadow-sm)}
+  .card h4{font-size:.9rem;margin:0 0 4px}
+  .card .big{font-size:1.3rem;font-weight:700;font-variant-numeric:tabular-nums}
+  .card .muted{color:var(--text-3);font-size:.78rem}
+  .note{background:var(--warn-soft);border:1px solid #efe0b0;color:var(--warn);border-radius:var(--r-sm);padding:10px 14px;margin:12px 0;font-size:13px}
+  .cta{display:inline-block;background:var(--accent);color:#fff;font-weight:600;padding:10px 18px;border-radius:var(--r-sm);margin-top:8px}
+  .cta:hover{background:var(--accent-hover);color:#fff;text-decoration:none}
+  footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--border);color:var(--text-3);font-size:12px}
+  @media(max-width:560px){.tier{grid-template-columns:1fr}h1{font-size:1.5rem}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>
+      AutoCDA
+    </div>
+    <h1>Verification API</h1>
+    <p class="lede">POST a circuit intent, get back a SPICE-verified, buyable design: real component values, the ngspice-measured result, honest error, the netlist, and a bill of materials.</p>
+    <span class="badge"><span class="dot"></span>Verified by real ngspice — deterministic, no per-call AI cost</span>
+  </header>
+
+  <h2>Base URL &amp; auth</h2>
+  <p>All endpoints return JSON and send permissive CORS. Replace the base URL with your deployment host. For local dev it is <code class="inline">http://localhost:3002</code>.</p>
+  <pre>BASE=https://api.autocda.example      # your API host
+# Authenticate with a key (optional — see tiers below):
+#   -H "x-api-key: YOUR_KEY"   or   -H "Authorization: Bearer YOUR_KEY"</pre>
+  <div class="note">No key required to start. Anonymous calls use the free tier. A key raises your rate limit. Keys are issued by the operator (set server-side via <code class="inline">API_KEYS</code>); never put a key in client-side code or a URL.</div>
+
+  <h2>Rate limits &amp; tiers</h2>
+  <div class="tier">
+    <div class="card">
+      <h4>Free (anonymous)</h4>
+      <div class="big">10<span class="muted"> req / min</span></div>
+      <div class="muted">No key. Limited per IP. Good for trying the API.</div>
+    </div>
+    <div class="card">
+      <h4>Keyed</h4>
+      <div class="big">120<span class="muted"> req / min</span></div>
+      <div class="muted">Send a key. Per-key limit is operator-configurable; higher tiers available.</div>
+    </div>
+  </div>
+  <p>Every response (except <code class="inline">/api/health</code>) carries rate headers:</p>
+  <table>
+    <tr><th>Header</th><th>Meaning</th></tr>
+    <tr><td class="mono">X-RateLimit-Limit</td><td>Requests allowed in the current window</td></tr>
+    <tr><td class="mono">X-RateLimit-Remaining</td><td>Requests left in this window</td></tr>
+    <tr><td class="mono">X-RateLimit-Reset</td><td>Unix time (s) when the window resets</td></tr>
+    <tr><td class="mono">Retry-After</td><td>Seconds to wait (only on <code>429</code>)</td></tr>
+  </table>
+  <p>Check your own usage any time:</p>
+  <pre>curl "$BASE/api/usage" -H "x-api-key: YOUR_KEY"
+# { "ok":true, "tier":"keyed", "limit":120, "used":57, "windowRemaining":119 }</pre>
+
+  <h2>Endpoints</h2>
+
+  <h3>Health</h3>
+  <div class="ep"><span class="m get">GET</span><span class="path">/api/health</span></div>
+  <p>No auth, no rate limit — safe for uptime probes.</p>
+  <pre>curl "$BASE/api/health"
+# { "ok":true, "service":"autocda-verify-api", "types":19 }</pre>
+
+  <h3>List circuit types</h3>
+  <div class="ep"><span class="m get">GET</span><span class="path">/api/types</span></div>
+  <p>The 19 supported circuit types and the target fields each accepts.</p>
+  <pre>curl "$BASE/api/types"
+# [ { "id":"rc_lowpass", "name":"RC Low-Pass Filter", "fields":["fc"] },
+#   { "id":"sallen_key_lowpass", "name":"Sallen-Key Low-Pass (2nd order)", "fields":["fc"] }, ... ]</pre>
+
+  <h3>Parse a prompt</h3>
+  <div class="ep"><span class="m post">POST</span><span class="path">/api/parse</span></div>
+  <p>Turn plain English into a structured spec (no design/verify step). Useful to preview how a prompt is understood.</p>
+  <pre>curl "$BASE/api/parse" -H "content-type: application/json" \
+  -d '{"prompt":"high-pass filter 6kHz, 2% tolerance on E96"}'
+# { "ok":true, "type":"rc_highpass", "targets":{"fc":6000},
+#   "constraints":{"tolerance":0.02,"eSeries":"E96"}, "confidence":0.9, "assumed":[] }</pre>
+
+  <h3>Verify a design</h3>
+  <div class="ep"><span class="m post">POST</span><span class="path">/api/verify</span></div>
+  <p>The main endpoint. Give a <code class="inline">prompt</code>, or an explicit <code class="inline">{ type, targets, constraints?, strategy? }</code>. Returns the chosen components, the ngspice-measured result, honest error vs. target, the netlist, and a BOM.</p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+    <tr><td class="mono">prompt</td><td>string</td><td>Natural language. Omit if sending <code>type</code>.</td></tr>
+    <tr><td class="mono">type</td><td>string</td><td>A <code>/api/types</code> id.</td></tr>
+    <tr><td class="mono">targets</td><td>object</td><td>e.g. <code>{ "fc": 1000 }</code></td></tr>
+    <tr><td class="mono">constraints</td><td>object</td><td><code>{ "tolerance":0.05, "eSeries":"E24" }</code> (optional)</td></tr>
+    <tr><td class="mono">strategy</td><td>string</td><td><code>"reasoning"</code> (default) or <code>"grid"</code></td></tr>
+  </table>
+  <pre>curl "$BASE/api/verify" -H "content-type: application/json" \
+  -d '{"prompt":"low-pass filter at 1kHz"}'
+# {
+#   "ok":true, "type":"rc_lowpass", "name":"RC Low-Pass Filter",
+#   "targets":{"fc":1000}, "verified":true,
+#   "targetName":"fc", "target":1000, "measured":994.8, "errorPct":0.0052,
+#   "converged":true, "iterations":1, "eSeries":"E24", "tolerance":0.05,
+#   "components":[ {"ref":"R1","value":"1 kΩ","rawValue":1000,"unit":"Ω"},
+#                  {"ref":"C1","value":"159 nF","rawValue":1.59e-7,"unit":"F"} ],
+#   "bom":{ "rows":[...], "total":0.XX },
+#   "netlist":"* RC Low-Pass ...",
+#   "trace":[ ... reasoning-loop steps ... ]
+# }</pre>
+  <p>Explicit form:</p>
+  <pre>curl "$BASE/api/verify" -H "content-type: application/json" \
+  -d '{"type":"voltage_divider","targets":{"Vin":9,"Vout":3.3},"constraints":{"eSeries":"E96"}}'</pre>
+
+  <h3>Compose a multi-stage circuit</h3>
+  <div class="ep"><span class="m post">POST</span><span class="path">/api/compose</span></div>
+  <p>Cascade verified stages into one circuit, measured end-to-end.</p>
+  <pre>curl "$BASE/api/compose" -H "content-type: application/json" \
+  -d '{"stages":[{"type":"rc_highpass","targets":{"fc":300}},
+               {"type":"rc_lowpass","targets":{"fc":3000}}]}'
+# { "ok":true, "stages":[...], "predicted":{...}, "measured":{...},
+#   "errors":{...}, "components":[...], "bom":{...}, "netlist":"..." }</pre>
+
+  <h2>Errors</h2>
+  <p>Errors are JSON: <code class="inline">{ "ok":false, "error":"..." }</code>.</p>
+  <table>
+    <tr><th>Status</th><th>When</th></tr>
+    <tr><td class="mono">400</td><td>Invalid JSON, or required field missing</td></tr>
+    <tr><td class="mono">401</td><td>Unknown API key</td></tr>
+    <tr><td class="mono">413</td><td>Request body exceeds the size cap (64 KB default)</td></tr>
+    <tr><td class="mono">422</td><td>Prompt not understood, or spec invalid for the type</td></tr>
+    <tr><td class="mono">429</td><td>Rate limit exceeded — see <code>Retry-After</code></td></tr>
+    <tr><td class="mono">500</td><td>Unexpected server error</td></tr>
+  </table>
+
+  <a class="cta" href="/">Try the live app →</a>
+
+  <footer>
+    AutoCDA — the SPICE-verified truth layer for AI circuit design. ngspice runs server-side; results are deterministic.
+  </footer>
+</div>
+</body>
+</html>

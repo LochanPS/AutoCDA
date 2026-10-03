@@ -89,3 +89,17 @@ input, select { font-family: inherit; transition: border-color 160ms var(--ease)
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
+
+/* Mobile-first shell: stack the desktop two-column layout on narrow screens.
+   The landing/results column (main) comes first; the describe sidebar below. */
+@media (max-width: 720px) {
+  .app-header { padding: 0 14px !important; gap: 10px !important; }
+  .mode-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-shrink: 0; }
+  .mode-tabs button { white-space: nowrap; padding: 7px 12px !important; }
+
+  .app-row { flex-direction: column !important; overflow-y: auto !important; padding: 12px !important; gap: 12px !important; }
+  .app-main { order: -1; flex: none !important; }
+  .empty-state { overflow: visible !important; flex: none !important; padding: 8px 4px 24px !important; }
+  .app-aside { width: 100% !important; flex: none !important; }
+  .aside-msgs { flex: none !important; max-height: 160px !important; }
+}

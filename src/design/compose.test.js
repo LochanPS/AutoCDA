@@ -42,6 +42,19 @@ describe("composeCircuit", () => {
     expect(new Set(names).size).toBe(names.length); // no duplicate model names
   });
 
+  test("connects a stage whose output node isn't literally 'out' (two_stage uses o2)", () => {
+    const c = composeCircuit([
+      { type: "two_stage_amplifier", targets: { Av: 100 } },
+      { type: "rc_lowpass", targets: { fc: 5000 } },
+    ]);
+    // Stage 1's output VCVS (E2) must drive the inter-stage net n1, and stage 2's
+    // input resistor must read from n1 — otherwise n1 floats (singular matrix).
+    expect(c.netlist).toMatch(/^E2_S1 n1 0 /m);
+    expect(c.netlist).toMatch(/^R1_S2 n1 out /m);
+    // No element should still reference the un-namespaced internal node o2.
+    expect(c.netlist).not.toMatch(/\bS1_o2\b/);
+  });
+
   test("rejects an unknown type and an empty chain", () => {
     expect(() => composeCircuit([{ type: "nope", targets: {} }])).toThrow();
     expect(() => composeCircuit([])).toThrow();
