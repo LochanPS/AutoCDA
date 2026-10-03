@@ -1117,7 +1117,82 @@ function EmptyState({ onExample, loading }) {
             ))}
           </div>
         </div>
+
+        <WaitlistForm />
       </div>
+    </div>
+  );
+}
+
+// Early-access / waitlist capture — the cheapest way to measure real demand.
+// POSTs { email, source } to REACT_APP_WAITLIST_ENDPOINT (Formspree/Tally/own API);
+// if unset, falls back to a mailto so it still works. Remembers "joined" locally.
+const WAITLIST_ENDPOINT = process.env.REACT_APP_WAITLIST_ENDPOINT || "";
+const WAITLIST_EMAIL = process.env.REACT_APP_WAITLIST_EMAIL || "";
+function WaitlistForm() {
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState(() => {
+    try { return localStorage.getItem("autocda_waitlist") ? "done" : "idle"; } catch { return "idle"; }
+  });
+
+  const submit = async () => {
+    const value = email.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) { setState("invalid"); return; }
+    setState("submitting");
+    const payload = { email: value, source: "autocda-waitlist", ts: new Date().toISOString() };
+    try {
+      if (WAITLIST_ENDPOINT) {
+        const res = await fetch(WAITLIST_ENDPOINT, {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error("bad status");
+      } else if (WAITLIST_EMAIL) {
+        window.location.href = `mailto:${WAITLIST_EMAIL}?subject=${encodeURIComponent("AutoCDA waitlist")}&body=${encodeURIComponent("Add me to the AutoCDA waitlist: " + value)}`;
+      }
+      try { localStorage.setItem("autocda_waitlist", value); } catch { /* ignore */ }
+      setState("done");
+    } catch {
+      setState("error");
+    }
+  };
+
+  if (state === "done") {
+    return (
+      <div style={{ marginTop: "28px", width: "100%", maxWidth: "420px", background: "var(--success-soft)", border: "1px solid var(--success)", color: "var(--success)", borderRadius: "var(--r)", padding: "14px 16px", fontSize: "var(--fs-sm)", fontWeight: 600 }}>
+        You're on the list. We'll email you when Pro features land.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: "28px", width: "100%", maxWidth: "440px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r)", boxShadow: "var(--shadow-sm)", padding: "16px", textAlign: "left" }}>
+      <div style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)", marginBottom: "4px" }}>Get early access</div>
+      <div style={{ fontSize: "var(--fs-sm)", color: "var(--text-2)", marginBottom: "12px" }}>
+        Pro features coming: multi-objective optimization, private history, exports, India ₹-landed BOM. Join the waitlist.
+      </div>
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); if (state === "invalid" || state === "error") setState("idle"); }}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="you@email.com"
+          style={{ flex: "1 1 200px", background: "var(--bg-primary)", border: `1px solid ${state === "invalid" ? "var(--danger)" : "var(--border)"}`, borderRadius: "var(--r-sm)", padding: "10px 12px", fontSize: "var(--fs-body)", color: "var(--text-primary)", outline: "none" }}
+        />
+        <button
+          onClick={submit}
+          disabled={state === "submitting"}
+          style={{ background: "var(--accent)", border: "none", borderRadius: "var(--r-sm)", color: "#fff", fontSize: "var(--fs-body)", fontWeight: 600, padding: "10px 18px", cursor: state === "submitting" ? "progress" : "pointer" }}
+          onMouseEnter={(e) => { if (state !== "submitting") e.currentTarget.style.background = "var(--accent-hover)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "var(--accent)"; }}
+        >
+          {state === "submitting" ? "…" : "Join waitlist"}
+        </button>
+      </div>
+      {state === "invalid" && <div style={{ color: "var(--danger)", fontSize: "var(--fs-xs)", marginTop: "6px" }}>Enter a valid email.</div>}
+      {state === "error" && <div style={{ color: "var(--danger)", fontSize: "var(--fs-xs)", marginTop: "6px" }}>Something went wrong — try again.</div>}
     </div>
   );
 }
@@ -1258,11 +1333,32 @@ const DIST_BOM_IMPORT = {
   mouser: "https://www.mouser.com/Bom/",
   digikey: "https://www.digikey.com/en/mylists/import",
 };
-// Prefer the server-tagged affiliate product link; else a plain search URL.
+// Public affiliate IDs for the catalog-fallback (client-built) links. These are
+// NOT secret — an affiliate ID is visible in the URL the moment anyone clicks —
+// so tagging them client-side is fine, and it lets Buy links earn even without
+// the pricing proxy. Secret API keys still live only server-side.
+//   REACT_APP_AFFILIATE_<SRC>           query string, e.g. "utm_source=aff&aff_id=123"
+//   REACT_APP_AFFILIATE_<SRC>_TEMPLATE  deep-link wrapper with {url}
+const PUBLIC_AFFILIATE = {
+  mouser: { params: process.env.REACT_APP_AFFILIATE_MOUSER || "", template: process.env.REACT_APP_AFFILIATE_MOUSER_TEMPLATE || "" },
+  digikey: { params: process.env.REACT_APP_AFFILIATE_DIGIKEY || "", template: process.env.REACT_APP_AFFILIATE_DIGIKEY_TEMPLATE || "" },
+  lcsc: { params: process.env.REACT_APP_AFFILIATE_LCSC || "", template: process.env.REACT_APP_AFFILIATE_LCSC_TEMPLATE || "" },
+};
+function tagPublicAffiliate(distributor, url) {
+  if (!url) return url;
+  const cfg = PUBLIC_AFFILIATE[distributor];
+  if (!cfg) return url;
+  if (cfg.template && cfg.template.includes("{url}")) return cfg.template.replace("{url}", encodeURIComponent(url));
+  if (cfg.params) return url + (url.includes("?") ? "&" : "?") + cfg.params.replace(/^[?&]/, "");
+  return url;
+}
+// Prefer the server-tagged affiliate product link; else a (public-affiliate-tagged)
+// distributor search URL for the part.
 function buyUrlForRow(r) {
-  if (r && r.link) return r.link;
+  if (r && r.link) return r.link; // already affiliate-tagged server-side
+  if (!r || !r.mpn) return null;
   const search = DIST_SEARCH[DEFAULT_DISTRIBUTOR] || DIST_SEARCH.mouser;
-  return r && r.mpn ? search(r.mpn) : null;
+  return tagPublicAffiliate(DEFAULT_DISTRIBUTOR, search(r.mpn));
 }
 function downloadText(filename, text) {
   const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
