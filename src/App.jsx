@@ -21,7 +21,7 @@ import { designAndVerify } from "./design/loop";
 import { llmReasoningProposer } from "./agents/reasoningAgent";
 import { runSpice } from "./sim/spice";
 import { parseWithLLM } from "./parse/llmParser";
-import { buildBOM, buildBOMPriced } from "./design/bom";
+import { buildBOM, buildBOMPriced, buildBomCsv } from "./design/bom";
 import { cached, makeMarketplaceSource } from "./design/distributorPricing";
 
 // Multi-distributor marketplace source (built once) when a proxy URL is set; else
@@ -1245,6 +1245,35 @@ function MonteCarloPanel({ circuit }) {
   );
 }
 
+// Distributor links for the BOM. Base URLs only — NOT secret. Affiliate/referral
+// IDs are appended server-side (pricingProxy), so priced rows arrive with an
+// already-tagged `link`; unpriced catalog rows fall back to a plain MPN search.
+const DEFAULT_DISTRIBUTOR = "mouser";
+const DIST_SEARCH = {
+  mouser: (mpn) => `https://www.mouser.com/c/?q=${encodeURIComponent(mpn)}`,
+  digikey: (mpn) => `https://www.digikey.com/en/products/result?keywords=${encodeURIComponent(mpn)}`,
+  lcsc: (mpn) => `https://www.lcsc.com/search?q=${encodeURIComponent(mpn)}`,
+};
+const DIST_BOM_IMPORT = {
+  mouser: "https://www.mouser.com/Bom/",
+  digikey: "https://www.digikey.com/en/mylists/import",
+};
+// Prefer the server-tagged affiliate product link; else a plain search URL.
+function buyUrlForRow(r) {
+  if (r && r.link) return r.link;
+  const search = DIST_SEARCH[DEFAULT_DISTRIBUTOR] || DIST_SEARCH.mouser;
+  return r && r.mpn ? search(r.mpn) : null;
+}
+function downloadText(filename, text) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 // Bill of materials: buyable parts, MPNs, quantities, and total cost.
 function BomPanel({ circuit }) {
   const [open, setOpen] = useState(true);
@@ -1275,6 +1304,16 @@ function BomPanel({ circuit }) {
   const td = { padding: "9px 18px", fontSize: "var(--fs-sm)", borderBottom: "1px solid var(--border)" };
   const tdR = { ...td, textAlign: "right", fontFamily: "var(--font-mono)" };
 
+  // "Buy full BOM": download the CSV (to drop into a distributor's BOM importer)
+  // and open that importer. Clicking a per-row affiliate Buy link first sets the
+  // distributor's referral cookie, which then attributes the whole cart.
+  const importUrl = DIST_BOM_IMPORT[DEFAULT_DISTRIBUTOR] || DIST_BOM_IMPORT.mouser;
+  const handleBuyAll = () => {
+    try { downloadText(`autocda-bom-${circuit.id || "design"}.csv`, buildBomCsv(bom)); } catch { /* ignore */ }
+    try { window.open(importUrl, "_blank", "noopener,noreferrer"); } catch { /* ignore */ }
+  };
+  const buyLinkStyle = { fontSize: "var(--fs-xs)", fontWeight: 600, color: "var(--accent)", textDecoration: "none", whiteSpace: "nowrap" };
+
   return (
     <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r)", boxShadow: "var(--shadow-sm)", overflow: "hidden" }}>
       <button
@@ -1293,6 +1332,19 @@ function BomPanel({ circuit }) {
         </span>
       </button>
       {open && (
+       <>
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "10px", padding: "10px 18px", borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
+          <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>{anyPriced ? "Links go to the cheapest distributor" : "Links search the distributor for each part"}</span>
+          <button
+            onClick={handleBuyAll}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "var(--accent)", border: "none", borderRadius: "var(--r-sm)", color: "#fff", fontSize: "var(--fs-sm)", fontWeight: 600, padding: "7px 14px", cursor: "pointer" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-hover)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "var(--accent)"; }}
+            title="Download the BOM CSV and open the distributor's BOM importer"
+          >
+            Buy full BOM ↗
+          </button>
+        </div>
         <table style={{ width: "100%", borderCollapse: "collapse", borderTop: "1px solid var(--border)" }}>
           <thead>
             <tr>
@@ -1304,6 +1356,7 @@ function BomPanel({ circuit }) {
               <th style={thR}>Line</th>
               {anyPriced && <th style={th}>From</th>}
               {anyPriced && <th style={thR}>Stock</th>}
+              <th style={thR}>Buy</th>
             </tr>
           </thead>
           <tbody>
@@ -1323,6 +1376,11 @@ function BomPanel({ circuit }) {
                   </td>
                 )}
                 {anyPriced && <td className="tnum" style={{ ...tdR, color: "var(--text-3)", fontSize: "var(--fs-xs)" }}>{r.priced && r.stock != null ? r.stock.toLocaleString() : r.priced ? "—" : "—"}</td>}
+                <td style={{ ...tdR, fontFamily: "inherit" }}>
+                  {buyUrlForRow(r)
+                    ? <a href={buyUrlForRow(r)} target="_blank" rel="noopener noreferrer nofollow sponsored" style={buyLinkStyle}>Buy ↗</a>
+                    : <span style={{ color: "var(--text-3)" }}>—</span>}
+                </td>
               </tr>
             ))}
             <tr>
@@ -1332,9 +1390,13 @@ function BomPanel({ circuit }) {
               <td className="tnum" style={{ ...tdR, borderBottom: "none", color: "var(--text)", fontWeight: 700 }}>${bom.total.toFixed(3)}</td>
               {anyPriced && <td style={{ ...td, borderBottom: "none", fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>{nSites > 1 ? "best per part" : ""}</td>}
               {anyPriced && <td style={{ ...td, borderBottom: "none" }} />}
+              <td style={{ ...tdR, borderBottom: "none" }}>
+                <button onClick={handleBuyAll} style={{ ...buyLinkStyle, background: "none", border: "none", cursor: "pointer" }}>Buy all ↗</button>
+              </td>
             </tr>
           </tbody>
         </table>
+       </>
       )}
     </div>
   );

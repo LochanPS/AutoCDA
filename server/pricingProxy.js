@@ -38,6 +38,29 @@ const path = require("path");
 
 const PORT = process.env.PRICING_PROXY_PORT || 3001;
 
+// ── affiliate link tagging (SERVER-SIDE ONLY — IDs never reach the browser) ─────
+// Per distributor, configure ONE of:
+//   AFFILIATE_<SRC>           query string appended to the product URL,
+//                             e.g. AFFILIATE_MOUSER="utm_source=aff&aff_id=12345"
+//   AFFILIATE_<SRC>_TEMPLATE  deep-link wrapper with a {url} placeholder (affiliate
+//                             networks), e.g. "https://click.net/deep?u={url}"
+// <SRC> is the uppercased source tag: MOUSER, DIGIKEY, LCSC, ...
+// With neither set for a source, its links pass through untouched.
+function applyAffiliate(source, link) {
+  if (!link || typeof link !== "string") return link;
+  const key = String(source || "").toUpperCase();
+  const template = process.env[`AFFILIATE_${key}_TEMPLATE`];
+  if (template && template.includes("{url}")) {
+    return template.replace("{url}", encodeURIComponent(link));
+  }
+  const params = process.env[`AFFILIATE_${key}`];
+  if (params) {
+    const sep = link.includes("?") ? "&" : "?";
+    return link + sep + params.replace(/^[?&]/, "");
+  }
+  return link;
+}
+
 // ── parsing helpers ───────────────────────────────────────────────────────────
 function parsePrice(s) {
   if (typeof s === "number") return s;
@@ -111,7 +134,9 @@ async function lookupDigikey(mpn) {
 // ── aggregate ─────────────────────────────────────────────────────────────────
 async function lookupAll(mpn) {
   const results = await Promise.allSettled([lookupMouser(mpn), lookupDigikey(mpn)]);
-  const offers = results.filter((r) => r.status === "fulfilled" && r.value).map((r) => r.value);
+  const offers = results
+    .filter((r) => r.status === "fulfilled" && r.value)
+    .map((r) => ({ ...r.value, link: applyAffiliate(r.value.source, r.value.link) }));
   offers.sort((a, b) => a.unitPrice - b.unitPrice);
   return { mpn, offers, best: offers[0] || null, count: offers.length };
 }
@@ -136,6 +161,9 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   const dists = [process.env.MOUSER_API_KEY && "Mouser", (process.env.DIGIKEY_CLIENT_ID && process.env.DIGIKEY_CLIENT_SECRET) && "Digi-Key"].filter(Boolean);
+  const aff = ["MOUSER", "DIGIKEY", "LCSC"].filter((k) => process.env[`AFFILIATE_${k}`] || process.env[`AFFILIATE_${k}_TEMPLATE`]);
   // eslint-disable-next-line no-console
   console.log(`[pricingProxy] http://localhost:${PORT}/api/pricing — distributors: ${dists.length ? dists.join(", ") : "NONE (set MOUSER_API_KEY / DIGIKEY_CLIENT_ID+SECRET)"}`);
+  // eslint-disable-next-line no-console
+  console.log(`[pricingProxy] affiliate tagging: ${aff.length ? aff.join(", ") : "none configured (set AFFILIATE_MOUSER / AFFILIATE_DIGIKEY / ...)"}`);
 });
