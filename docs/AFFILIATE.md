@@ -1,8 +1,17 @@
-# BOM affiliate revenue
+# BOM distributor links & (optional) affiliate revenue
 
-AutoCDA's bill of materials links every part to a distributor. With affiliate
-IDs configured, those "Buy" clicks earn referral commission — the first, lowest-
-friction revenue stream (no payments or accounts needed).
+> **Reality check (verified Oct 2026):** Mouser, DigiKey and LCSC do **not** run
+> open, self-serve affiliate programs for publishers — they offer marketplaces,
+> developer APIs and corporate/educational referral programs instead. Real affiliate
+> programs that fit electronic parts: **element14/Newark**, Amazon Associates,
+> AliExpress. So affiliate is a **thin, partial, de-prioritised** stream here, not a
+> revenue pillar. The real money is **Pro + API + education** (see GO_TO_MARKET.md).
+> Pursue a direct **element14 partnership** by phone if you want distributor revenue.
+
+AutoCDA's core value is a **neutral, multi-seller price comparison**, so the BOM
+**never favours one distributor**: each part shows every seller's offer (cheapest
+first) and you can buy from any of them. We only tag a link with a seller's *own*
+referral where that seller has a program — which keeps the comparison unbiased.
 
 ## How it works
 

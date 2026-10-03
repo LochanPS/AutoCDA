@@ -1320,45 +1320,38 @@ function MonteCarloPanel({ circuit }) {
   );
 }
 
-// Distributor links for the BOM. Base URLs only — NOT secret. Affiliate/referral
-// IDs are appended server-side (pricingProxy), so priced rows arrive with an
-// already-tagged `link`; unpriced catalog rows fall back to a plain MPN search.
-const DEFAULT_DISTRIBUTOR = "mouser";
-const DIST_SEARCH = {
-  mouser: (mpn) => `https://www.mouser.com/c/?q=${encodeURIComponent(mpn)}`,
-  digikey: (mpn) => `https://www.digikey.com/en/products/result?keywords=${encodeURIComponent(mpn)}`,
-  lcsc: (mpn) => `https://www.lcsc.com/search?q=${encodeURIComponent(mpn)}`,
-};
-const DIST_BOM_IMPORT = {
-  mouser: "https://www.mouser.com/Bom/",
-  digikey: "https://www.digikey.com/en/mylists/import",
-};
-// Public affiliate IDs for the catalog-fallback (client-built) links. These are
-// NOT secret — an affiliate ID is visible in the URL the moment anyone clicks —
-// so tagging them client-side is fine, and it lets Buy links earn even without
-// the pricing proxy. Secret API keys still live only server-side.
-//   REACT_APP_AFFILIATE_<SRC>           query string, e.g. "utm_source=aff&aff_id=123"
-//   REACT_APP_AFFILIATE_<SRC>_TEMPLATE  deep-link wrapper with {url}
-const PUBLIC_AFFILIATE = {
-  mouser: { params: process.env.REACT_APP_AFFILIATE_MOUSER || "", template: process.env.REACT_APP_AFFILIATE_MOUSER_TEMPLATE || "" },
-  digikey: { params: process.env.REACT_APP_AFFILIATE_DIGIKEY || "", template: process.env.REACT_APP_AFFILIATE_DIGIKEY_TEMPLATE || "" },
-  lcsc: { params: process.env.REACT_APP_AFFILIATE_LCSC || "", template: process.env.REACT_APP_AFFILIATE_LCSC_TEMPLATE || "" },
-};
-function tagPublicAffiliate(distributor, url) {
-  if (!url) return url;
-  const cfg = PUBLIC_AFFILIATE[distributor];
-  if (!cfg) return url;
-  if (cfg.template && cfg.template.includes("{url}")) return cfg.template.replace("{url}", encodeURIComponent(url));
-  if (cfg.params) return url + (url.includes("?") ? "&" : "?") + cfg.params.replace(/^[?&]/, "");
-  return url;
-}
-// Prefer the server-tagged affiliate product link; else a (public-affiliate-tagged)
-// distributor search URL for the part.
-function buyUrlForRow(r) {
-  if (r && r.link) return r.link; // already affiliate-tagged server-side
-  if (!r || !r.mpn) return null;
-  const search = DIST_SEARCH[DEFAULT_DISTRIBUTOR] || DIST_SEARCH.mouser;
-  return tagPublicAffiliate(DEFAULT_DISTRIBUTOR, search(r.mpn));
+// Distributor links for the BOM. NEUTRAL by design: AutoCDA's value is an unbiased
+// multi-seller price comparison, so we never favour one distributor. Base URLs only
+// (not secret). When live pricing is on, each offer links to its OWN seller's product
+// page (tagged with that seller's referral server-side, if configured). Without live
+// pricing we offer a neutral MPN search across several distributors — no default seller.
+const DISTRIBUTORS = [
+  { id: "mouser", label: "Mouser", search: (mpn) => `https://www.mouser.com/c/?q=${encodeURIComponent(mpn)}`, importer: "https://www.mouser.com/Bom/" },
+  { id: "digikey", label: "DigiKey", search: (mpn) => `https://www.digikey.com/en/products/result?keywords=${encodeURIComponent(mpn)}`, importer: "https://www.digikey.com/en/mylists/import" },
+  { id: "lcsc", label: "LCSC", search: (mpn) => `https://www.lcsc.com/search?q=${encodeURIComponent(mpn)}`, importer: "" },
+];
+const DIST_BY_ID = Object.fromEntries(DISTRIBUTORS.map((d) => [d.id, d]));
+const distLabel = (id) => (DIST_BY_ID[id] ? DIST_BY_ID[id].label : id);
+// Per-row buy options, cheapest first. Priced rows → one entry per seller offer,
+// each linking to that seller's product page. Unpriced rows → a neutral search at
+// every distributor. Never a single forced seller.
+function buyOptionsForRow(r) {
+  if (!r) return [];
+  if (r.priced && Array.isArray(r.offers) && r.offers.length) {
+    return r.offers
+      .slice()
+      .sort((a, b) => (a.unitPrice ?? Infinity) - (b.unitPrice ?? Infinity))
+      .map((o) => ({
+        label: distLabel(o.source),
+        price: typeof o.unitPrice === "number" ? o.unitPrice : null,
+        url: o.link || (DIST_BY_ID[o.source] ? DIST_BY_ID[o.source].search(r.mpn) : null),
+      }))
+      .filter((o) => o.url);
+  }
+  if (r.priced && r.link) return [{ label: distLabel(r.priceSource), price: r.unitPrice, url: r.link }];
+  if (!r.mpn) return [];
+  // Catalog fallback: neutral search at each distributor.
+  return DISTRIBUTORS.map((d) => ({ label: d.label, price: null, url: d.search(r.mpn) }));
 }
 function downloadText(filename, text) {
   const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
@@ -1400,14 +1393,12 @@ function BomPanel({ circuit }) {
   const td = { padding: "9px 18px", fontSize: "var(--fs-sm)", borderBottom: "1px solid var(--border)" };
   const tdR = { ...td, textAlign: "right", fontFamily: "var(--font-mono)" };
 
-  // "Buy full BOM": download the CSV (to drop into a distributor's BOM importer)
-  // and open that importer. Clicking a per-row affiliate Buy link first sets the
-  // distributor's referral cookie, which then attributes the whole cart.
-  const importUrl = DIST_BOM_IMPORT[DEFAULT_DISTRIBUTOR] || DIST_BOM_IMPORT.mouser;
-  const handleBuyAll = () => {
+  // Neutral full-BOM export: download the CSV to upload into ANY distributor's BOM
+  // importer. We don't force a single seller — importer links are offered for each.
+  const handleDownloadCsv = () => {
     try { downloadText(`autocda-bom-${circuit.id || "design"}.csv`, buildBomCsv(bom)); } catch { /* ignore */ }
-    try { window.open(importUrl, "_blank", "noopener,noreferrer"); } catch { /* ignore */ }
   };
+  const importers = DISTRIBUTORS.filter((d) => d.importer);
   const buyLinkStyle = { fontSize: "var(--fs-xs)", fontWeight: 600, color: "var(--accent)", textDecoration: "none", whiteSpace: "nowrap" };
 
   return (
@@ -1429,17 +1420,32 @@ function BomPanel({ circuit }) {
       </button>
       {open && (
        <>
-        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "10px", padding: "10px 18px", borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
-          <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>{anyPriced ? "Links go to the cheapest distributor" : "Links search the distributor for each part"}</span>
-          <button
-            onClick={handleBuyAll}
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "var(--accent)", border: "none", borderRadius: "var(--r-sm)", color: "#fff", fontSize: "var(--fs-sm)", fontWeight: 600, padding: "7px 14px", cursor: "pointer" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-hover)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "var(--accent)"; }}
-            title="Download the BOM CSV and open the distributor's BOM importer"
-          >
-            Buy full BOM ↗
-          </button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", padding: "10px 18px", borderTop: "1px solid var(--border)", background: "var(--surface-2)", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>
+            {anyPriced ? "Compare sellers per part, cheapest first — buy from whichever you prefer." : "No live prices — search each part at any distributor."}
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            {importers.length > 0 && (
+              <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>
+                Import full BOM to{" "}
+                {importers.map((d, k) => (
+                  <React.Fragment key={d.id}>
+                    {k > 0 ? " · " : " "}
+                    <a href={d.importer} target="_blank" rel="noopener noreferrer nofollow sponsored" style={buyLinkStyle}>{d.label}</a>
+                  </React.Fragment>
+                ))}
+              </span>
+            )}
+            <button
+              onClick={handleDownloadCsv}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "var(--accent)", border: "none", borderRadius: "var(--r-sm)", color: "#fff", fontSize: "var(--fs-sm)", fontWeight: 600, padding: "7px 14px", cursor: "pointer" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-hover)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "var(--accent)"; }}
+              title="Download the BOM as CSV to upload into any distributor's BOM tool"
+            >
+              Download BOM (CSV)
+            </button>
+          </span>
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse", borderTop: "1px solid var(--border)" }}>
           <thead>
@@ -1473,9 +1479,20 @@ function BomPanel({ circuit }) {
                 )}
                 {anyPriced && <td className="tnum" style={{ ...tdR, color: "var(--text-3)", fontSize: "var(--fs-xs)" }}>{r.priced && r.stock != null ? r.stock.toLocaleString() : r.priced ? "—" : "—"}</td>}
                 <td style={{ ...tdR, fontFamily: "inherit" }}>
-                  {buyUrlForRow(r)
-                    ? <a href={buyUrlForRow(r)} target="_blank" rel="noopener noreferrer nofollow sponsored" style={buyLinkStyle}>Buy ↗</a>
-                    : <span style={{ color: "var(--text-3)" }}>—</span>}
+                  {(() => {
+                    const opts = buyOptionsForRow(r);
+                    if (!opts.length) return <span style={{ color: "var(--text-3)" }}>—</span>;
+                    return (
+                      <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "4px 8px", justifyContent: "flex-end" }}>
+                        {opts.slice(0, 4).map((o, k) => (
+                          <a key={k} href={o.url} target="_blank" rel="noopener noreferrer nofollow sponsored" style={buyLinkStyle}
+                             title={`Buy ${r.mpn} at ${o.label}`}>
+                            {o.label}{o.price != null ? ` $${o.price.toFixed(3)}` : ""} ↗
+                          </a>
+                        ))}
+                      </span>
+                    );
+                  })()}
                 </td>
               </tr>
             ))}
@@ -1487,7 +1504,7 @@ function BomPanel({ circuit }) {
               {anyPriced && <td style={{ ...td, borderBottom: "none", fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>{nSites > 1 ? "best per part" : ""}</td>}
               {anyPriced && <td style={{ ...td, borderBottom: "none" }} />}
               <td style={{ ...tdR, borderBottom: "none" }}>
-                <button onClick={handleBuyAll} style={{ ...buyLinkStyle, background: "none", border: "none", cursor: "pointer" }}>Buy all ↗</button>
+                <button onClick={handleDownloadCsv} style={{ ...buyLinkStyle, background: "none", border: "none", cursor: "pointer" }} title="Download BOM CSV">CSV ↓</button>
               </td>
             </tr>
           </tbody>
