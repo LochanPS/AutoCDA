@@ -30,6 +30,8 @@ const BOM_PRICE_SOURCE = process.env.REACT_APP_PRICING_PROXY
   ? cached(makeMarketplaceSource({ baseUrl: process.env.REACT_APP_PRICING_PROXY }))
   : null;
 import { runToleranceSweep } from "./design/montecarlo";
+import { usePro } from "./pro/ProContext";
+import { ProButton, ProUpsell, ProGate } from "./pro/ProUI";
 
 // Dev-only: register evaluation hooks (window.__yieldBench / __parserBench / __designBench).
 if (process.env.NODE_ENV === "development") {
@@ -212,6 +214,7 @@ export default function App() {
   const mainRef = useRef(null);
   const toastTimer = useRef(null);
   const hashHandled = useRef(false);
+  const { isPro } = usePro();
 
   // A new result can be taller than the viewport now that the result column
   // scrolls — land at the top (title + measured stats) rather than mid-page.
@@ -466,12 +469,12 @@ export default function App() {
       <Header verification={mode === "design" ? selectedCircuit?.verification : null} mode={mode} onMode={setMode} />
 
       {mode === "import" ? (
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden", padding: "16px" }}>
-          <NetlistImport />
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "auto", padding: "16px" }}>
+          {isPro ? <NetlistImport /> : <ProUpsell feature="Netlist import" note="Import an external SPICE netlist and verify it. Core design + verification stays free." />}
         </div>
       ) : mode === "chain" ? (
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden", padding: "16px" }}>
-          <ChainBuilder />
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "auto", padding: "16px" }}>
+          {isPro ? <ChainBuilder /> : <ProUpsell feature="Build-a-chain" note="Cascade verified stages into multi-stage circuits, measured end-to-end. Core design + verification stays free." />}
         </div>
       ) : (
       <div className="app-row" style={{ display: "flex", flex: 1, overflow: "hidden", padding: "16px", gap: "16px", minHeight: 0 }}>
@@ -727,7 +730,7 @@ function Header({ verification, mode, onMode }) {
         </div>
       </div>
       {onMode && <ModeTabs mode={mode} onMode={onMode} />}
-      <span style={{ width: "1px" }} />{/* status shown under the result title, not duplicated here */}
+      <ProButton />{/* status shown under the result title, not duplicated here */}
     </header>
   );
 }
@@ -1210,11 +1213,13 @@ function DemoStat({ label, value, accent }) {
 // N times, show the metric distribution + manufacturing yield.
 function MonteCarloPanel({ circuit }) {
   const v = circuit.verification;
+  const { isPro } = usePro();
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState(null);
 
   if (!v?.verifiable) return null;
+  if (!isPro) return <ProUpsell feature="Tolerance analysis" note="Monte-Carlo yield analysis (and multi-objective optimization) — part of Pro. Core design + verification stays free." />;
 
   const run = async () => {
     setRunning(true); setProgress(0); setResult(null);
@@ -1436,15 +1441,17 @@ function BomPanel({ circuit }) {
                 ))}
               </span>
             )}
-            <button
-              onClick={handleDownloadCsv}
-              style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "var(--accent)", border: "none", borderRadius: "var(--r-sm)", color: "#fff", fontSize: "var(--fs-sm)", fontWeight: 600, padding: "7px 14px", cursor: "pointer" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-hover)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "var(--accent)"; }}
-              title="Download the BOM as CSV to upload into any distributor's BOM tool"
-            >
-              Download BOM (CSV)
-            </button>
+            <ProGate feature="BOM export" label="Pro — export">
+              <button
+                onClick={handleDownloadCsv}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "var(--accent)", border: "none", borderRadius: "var(--r-sm)", color: "#fff", fontSize: "var(--fs-sm)", fontWeight: 600, padding: "7px 14px", cursor: "pointer" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-hover)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "var(--accent)"; }}
+                title="Download the BOM as CSV to upload into any distributor's BOM tool"
+              >
+                Download BOM (CSV)
+              </button>
+            </ProGate>
           </span>
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse", borderTop: "1px solid var(--border)" }}>
@@ -1504,7 +1511,9 @@ function BomPanel({ circuit }) {
               {anyPriced && <td style={{ ...td, borderBottom: "none", fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>{nSites > 1 ? "best per part" : ""}</td>}
               {anyPriced && <td style={{ ...td, borderBottom: "none" }} />}
               <td style={{ ...tdR, borderBottom: "none" }}>
-                <button onClick={handleDownloadCsv} style={{ ...buyLinkStyle, background: "none", border: "none", cursor: "pointer" }} title="Download BOM CSV">CSV ↓</button>
+                <ProGate feature="BOM export" label="Pro">
+                  <button onClick={handleDownloadCsv} style={{ ...buyLinkStyle, background: "none", border: "none", cursor: "pointer" }} title="Download BOM CSV">CSV ↓</button>
+                </ProGate>
               </td>
             </tr>
           </tbody>
