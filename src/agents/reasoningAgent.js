@@ -77,7 +77,7 @@ const MONO = {
  * partner in the governing equation. Single-resistor types (led, zener) have no
  * partner and are left to the single-part floor.
  */
-const JOINT_PAIR = {
+export const JOINT_PAIR = {
   rc_lowpass: ["R1", "C1"],
   rc_highpass: ["R1", "C1"],
   band_pass: ["R1", "C1"],

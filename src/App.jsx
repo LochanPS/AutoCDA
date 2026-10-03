@@ -30,6 +30,7 @@ const BOM_PRICE_SOURCE = process.env.REACT_APP_PRICING_PROXY
   ? cached(makeMarketplaceSource({ baseUrl: process.env.REACT_APP_PRICING_PROXY }))
   : null;
 import { runToleranceSweep } from "./design/montecarlo";
+import { optimizeMulti } from "./design/optimize";
 import { usePro } from "./pro/ProContext";
 import { ProButton, ProUpsell, ProGate } from "./pro/ProUI";
 
@@ -464,6 +465,28 @@ export default function App() {
     });
   }, [selectedCircuit]);
 
+  // Apply an optimizer-chosen candidate: swap in its components and overlay the
+  // SPICE-measured result the optimizer already graded for that candidate.
+  const handleApplyOptimized = useCallback((cand) => {
+    if (!selectedCircuit || !cand) return;
+    setSelectedCircuit(prev => {
+      const recalculated = recalculateFromComponents(prev.id, cand.components, prev.derivedParams);
+      const base = recalculated
+        ? { ...recalculated, kicadSchematic: prev.kicadSchematic, kicadNetlist: prev.kicadNetlist }
+        : { ...prev, components: cand.components };
+      return {
+        ...base,
+        verification: {
+          ...prev.verification,
+          measured: cand.measured,
+          errorPct: cand.errorPct,
+          converged: !!cand.inSpec,
+          optimized: true,
+        },
+      };
+    });
+  }, [selectedCircuit]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg-primary)", overflow: "hidden" }}>
       <Header verification={mode === "design" ? selectedCircuit?.verification : null} mode={mode} onMode={setMode} />
@@ -616,6 +639,7 @@ export default function App() {
                     />
                     <BomPanel circuit={selectedCircuit} />
                     <MonteCarloPanel circuit={selectedCircuit} />
+                    <OptimizePanel circuit={selectedCircuit} onApply={handleApplyOptimized} />
                     <RefineTrace circuit={selectedCircuit} />
                     <HowItWorks steps={logSteps} />
                   </div>
@@ -1205,6 +1229,135 @@ function DemoStat({ label, value, accent }) {
     <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
       <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>{label}</span>
       <span className="tnum" style={{ fontSize: "var(--fs-h2)", fontWeight: 700, color: accent || "var(--text)" }}>{value}</span>
+    </div>
+  );
+}
+
+// Multi-objective optimization (Pro): trade off measured error, cost, power and
+// yield with weights. Every candidate is SPICE-graded; shows the Pareto choices.
+const OBJ_META = [
+  { id: "error", label: "Accuracy" },
+  { id: "cost", label: "Cost" },
+  { id: "power", label: "Low power" },
+  { id: "yield", label: "Yield" },
+];
+const fmtPower = (p) => (p == null ? "—" : p >= 1 ? `${p.toFixed(2)} W` : p >= 1e-3 ? `${(p * 1e3).toFixed(1)} mW` : `${(p * 1e6).toFixed(0)} µW`);
+
+function OptimizePanel({ circuit, onApply }) {
+  const { isPro } = usePro();
+  const v = circuit.verification;
+  const [weights, setWeights] = useState({ error: 2, cost: 0, power: 1, yield: 1 });
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState("");
+
+  if (!v?.verifiable) return null;
+  if (!isPro) return <ProUpsell feature="Multi-objective optimization" note="Trade off measured error, cost, power and yield with weights — every candidate SPICE-graded, with the Pareto choice shown. Part of Pro." />;
+
+  const setW = (k, val) => setWeights((w) => ({ ...w, [k]: Number(val) }));
+  const run = async () => {
+    setRunning(true); setProgress(0); setErr(""); setRes(null);
+    try {
+      const out = await optimizeMulti({
+        type: circuit.id,
+        targets: v.targets,
+        components: circuit.components,
+        tolerance: v.tolerance ?? 0.05,
+        weights,
+        runSpice,
+        onProgress: setProgress,
+      });
+      setRes(out);
+    } catch (e) {
+      setErr(String(e.message || e));
+    }
+    setRunning(false);
+  };
+
+  const td = { padding: "8px 12px", fontSize: "var(--fs-sm)", borderBottom: "1px solid var(--border)" };
+  const tdR = { ...td, textAlign: "right", fontFamily: "var(--font-mono)" };
+  const th = { ...td, color: "var(--text-3)", fontSize: "var(--fs-xs)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, textAlign: "right" };
+  const partsOf = (c) => (c.components || []).filter((p) => p.unit === "Ω" || p.unit === "F").map((p) => `${p.ref} ${p.display}`).join(" · ");
+  const list = res ? (res.pareto.length ? [...res.pareto].sort((a, b) => a.score - b.score).slice(0, 6) : res.candidates.slice(0, 6)) : [];
+  const show = (o) => res && res.objectives.includes(o);
+
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r)", boxShadow: "var(--shadow-sm)", overflow: "hidden" }}>
+      <div style={{ padding: "14px 18px", borderBottom: res || running ? "1px solid var(--border)" : "none" }}>
+        <div style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}>Multi-objective optimization</div>
+        <div style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)", marginTop: "2px" }}>
+          Set what matters, then search buyable candidates — every one SPICE-graded. Power applies to DC circuits; yield runs Monte-Carlo on the top picks.
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "14px 22px", marginTop: "14px" }}>
+          {OBJ_META.map((o) => (
+            <label key={o.id} style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: "130px" }}>
+              <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-2)", fontWeight: 600, display: "flex", justifyContent: "space-between" }}>
+                <span>{o.label}</span><span className="tnum" style={{ color: "var(--text-3)" }}>{weights[o.id]}</span>
+              </span>
+              <input type="range" min="0" max="3" step="1" value={weights[o.id]} disabled={running}
+                     onChange={(e) => setW(o.id, e.target.value)} style={{ accentColor: "var(--accent)" }} />
+            </label>
+          ))}
+        </div>
+
+        <button
+          onClick={run}
+          disabled={running}
+          style={{ marginTop: "14px", background: running ? "var(--surface-2)" : "var(--accent)", border: "none", borderRadius: "var(--r-sm)", color: running ? "var(--text-3)" : "#fff", fontSize: "var(--fs-sm)", fontWeight: 600, padding: "9px 16px", cursor: running ? "progress" : "pointer" }}
+          onMouseEnter={(e) => { if (!running) e.currentTarget.style.background = "var(--accent-hover)"; }}
+          onMouseLeave={(e) => { if (!running) e.currentTarget.style.background = "var(--accent)"; }}
+        >
+          {running ? `Optimizing ${Math.round(progress * 100)}%` : res ? "Re-optimize" : "Optimize"}
+        </button>
+        {err && <div style={{ color: "var(--danger)", fontSize: "var(--fs-xs)", marginTop: "8px" }}>{err}</div>}
+      </div>
+
+      {running && (
+        <div style={{ height: "3px", background: "var(--surface-2)" }}>
+          <div style={{ height: "100%", width: `${progress * 100}%`, background: "var(--accent)", transition: "width 120ms var(--ease)" }} />
+        </div>
+      )}
+
+      {res && !running && (
+        <div style={{ overflowX: "auto" }}>
+          <div style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)", padding: "10px 18px 0" }}>
+            {res.candidates.length} candidates graded · optimizing {res.objectives.map((o) => (OBJ_META.find((m) => m.id === o) || {}).label || o).join(" + ")} · Pareto choices below (top = best for your weights)
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "8px" }}>
+            <thead>
+              <tr>
+                <th style={{ ...th, textAlign: "left" }}>Parts</th>
+                <th style={th}>Error</th>
+                {show("cost") && <th style={th}>Cost</th>}
+                {show("power") && <th style={th}>Power</th>}
+                {show("yield") && <th style={th}>Yield</th>}
+                <th style={th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((c, i) => {
+                const chosen = res.chosen && c === res.chosen;
+                return (
+                  <tr key={i} style={{ background: chosen ? "var(--accent-soft)" : "transparent" }}>
+                    <td style={{ ...td, fontFamily: "var(--font-mono)", fontSize: "var(--fs-xs)", color: "var(--text)" }}>
+                      {chosen && <span style={{ color: "var(--accent)", fontWeight: 700 }}>★ </span>}{partsOf(c)}
+                    </td>
+                    <td style={{ ...tdR, color: c.inSpec ? "var(--success)" : "var(--text)" }}>{c.errorPct != null ? `${(c.errorPct * 100).toFixed(2)}%` : "—"}</td>
+                    {show("cost") && <td style={tdR}>${Number(c.cost).toFixed(3)}</td>}
+                    {show("power") && <td style={tdR}>{fmtPower(c.power)}</td>}
+                    {show("yield") && <td style={tdR}>{c.yield != null ? `${(c.yield * 100).toFixed(0)}%` : "—"}</td>}
+                    <td style={{ ...tdR }}>
+                      <button onClick={() => onApply && onApply(c)} style={{ background: "none", border: "none", color: "var(--accent)", fontSize: "var(--fs-xs)", fontWeight: 600, cursor: "pointer" }}>Apply</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
