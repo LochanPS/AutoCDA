@@ -3,7 +3,7 @@
 Two independent deployables:
 
 1. **Web app** — static Create-React-App build → **Vercel** (CDN).
-2. **Verification API** — always-on Node service → **Render** (Docker).
+2. **Verification API** — Node service → **Render** (free, no card; `render.yaml` blueprint).
 
 They communicate only over HTTPS. The app needs **no secrets**. ngspice runs in
 both places: in the app it is WebAssembly **base64-inlined into the JS bundle**
@@ -73,7 +73,7 @@ instance; scale-to-zero is fine and usually free at low volume.
 | Host | Card required? | Cost | Notes |
 |---|---|---|---|
 | **Hugging Face Spaces (Docker SDK)** | **No** | Free | **Recommended if you have no card.** Runs this Dockerfile; keeps the real server (rate-limiting works). Sleeps after ~48 h idle, wakes on request. |
-| **Render** | **No** | Free (time-limited / idle spin-down) | No card, but not durable. |
+| **Render (free Node web service)** | **No** | Free, indefinite | **Recommended no-card path.** No Docker needed — `render.yaml` blueprint committed. Idles after ~15 min, cold-starts on next request. |
 | **Google Cloud Run** | Yes (Visa/MC/Amex) | ~$0 low traffic (2M req/mo free) | Managed, no expiry. Best if you *can* add a card. |
 | **Oracle Cloud Always Free** | Yes (card to verify) | Free forever | ARM VM, you own the box. |
 | **Fly.io / Koyeb** | Yes | Small free allowance | `fly launch --dockerfile`. |
@@ -143,8 +143,17 @@ docker run -d --restart unless-stopped -p 3002:3002 \
 # then front :3002 with Caddy for automatic HTTPS
 ```
 
-**Render** (works, but time-limited — not recommended long-term): New → Web
-Service → Docker → health path `/api/health` → set `CORS_ORIGIN` → Create.
+**Render — free Node web service, no card, no Docker** (recommended no-card path):
+A `render.yaml` blueprint is committed (runtime `node`, `npm ci` / `npm run verify-api`,
+health check `/api/health`, free plan).
+1. render.com → sign up with GitHub (no card).
+2. **New + → Blueprint** → pick `LochanPS/AutoCDA` → Render reads `render.yaml` → **Apply**.
+3. Build runs, then live at `https://autocda-verify-api.onrender.com`.
+4. (Optional) edit `CORS_ORIGIN` / add `API_KEYS` in the service's **Environment** tab.
+
+> Free Render services spin down after ~15 min idle and cold-start on the next
+> request (~30–60 s, loading the ~20 MB engine). Indefinite — they do not expire.
+> Not using the committed `Dockerfile` here; the Node runtime runs the start command directly.
 
 ### Environment variables (set in the host's dashboard / CLI)
 

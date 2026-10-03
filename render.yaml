@@ -1,0 +1,22 @@
+# Render Blueprint — AutoCDA Verification API as a FREE Node web service.
+# No Docker, no credit card. Render injects PORT; the server reads process.env.PORT.
+# Free services spin down after ~15 min idle and cold-start on the next request.
+services:
+  - type: web
+    name: autocda-verify-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm run verify-api
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Lock CORS to the deployed web app (change if your app URL changes):
+      - key: CORS_ORIGIN
+        value: https://auto-cda-phi.vercel.app
+      # Free anonymous tier limit (requests per minute per IP):
+      - key: ANON_RATE_LIMIT
+        value: "30"
+      # Add keys later for higher limits, e.g. API_KEYS=key1=600,key2
