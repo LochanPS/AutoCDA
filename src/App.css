@@ -103,6 +103,10 @@ input, select { font-family: inherit; transition: border-color 160ms var(--ease)
    in a short fixed-height nested-scroll box that clips the lower panels. */
 .tab-pane--auto { height: auto !important; }
 
+/* Tab bar scrolls sideways instead of wrapping when the tabs overflow. */
+.tabs-bar { -webkit-overflow-scrolling: touch; scrollbar-width: none; scroll-behavior: smooth; }
+.tabs-bar::-webkit-scrollbar { height: 0; display: none; }
+
 /* Mobile-first shell: stack the desktop two-column layout on narrow screens.
    The landing/results column (main) comes first; the describe sidebar below. */
 @media (max-width: 720px) {

@@ -873,7 +873,7 @@ function Stat({ label, value, accent }) {
 
 function Tabs({ active, onChange }) {
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: "3px", background: "var(--surface-2)", padding: "3px", borderRadius: "999px", alignSelf: "flex-start", maxWidth: "100%", border: "1px solid var(--border)" }}>
+    <div className="tabs-bar" style={{ display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: "3px", background: "var(--surface-2)", padding: "3px", borderRadius: "999px", alignSelf: "flex-start", maxWidth: "100%", border: "1px solid var(--border)" }}>
       {TABS.map(t => {
         const on = t.id === active;
         return (
@@ -883,6 +883,7 @@ function Tabs({ active, onChange }) {
             style={{
               border: "none", borderRadius: "999px", cursor: "pointer",
               padding: "7px 16px", fontSize: "var(--fs-sm)", fontWeight: 600,
+              whiteSpace: "nowrap", flexShrink: 0,
               background: on ? "var(--surface)" : "transparent",
               color: on ? "var(--text)" : "var(--text-2)",
               boxShadow: on ? "var(--shadow-sm)" : "none",
