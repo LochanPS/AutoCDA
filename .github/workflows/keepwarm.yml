@@ -1,0 +1,21 @@
+# Keep-warm backup for the free-tier Render verify API.
+#
+# The instance self-pings its own public health URL (render.yaml KEEP_WARM_MS) to
+# stay awake while running. This external cron is the cold backup: if the instance
+# ever fully spins down, a scheduled ping wakes it so the next real caller doesn't
+# eat the ~50 s cold start. Free for public repos. GitHub may disable scheduled
+# workflows after 60 days of repo inactivity and cron timing is best-effort.
+name: keep-warm
+on:
+  schedule:
+    - cron: "*/10 * * * *" # every ~10 minutes
+  workflow_dispatch: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/health
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 \
+            https://autocda-verify-api.onrender.com/api/health || echo 000)
+          echo "health -> $code"

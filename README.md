@@ -12,6 +12,32 @@ the simulator. The two are labelled distinctly; nothing is faked.
 
 ---
 
+## Use it from an AI agent (MCP) — one line
+
+AutoCDA is also an **MCP server**: let Claude Desktop, Claude Code, Cursor, or any
+MCP client verify a circuit mid-reasoning instead of guessing component values.
+
+```bash
+npx autocda-verify-mcp
+```
+
+Add it to an MCP client, e.g. Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{ "mcpServers": { "autocda": { "command": "npx", "args": ["-y", "autocda-verify-mcp"] } } }
+```
+
+Then ask: *"design a 2 kHz low-pass within 2% and verify it."* The agent calls
+`verify_circuit` and gets the real ngspice-measured result — value, honest error,
+buyable BOM, and a reproducibility stamp. Tools: `verify_circuit`, `parse_prompt`,
+`compose_circuit`, `list_circuit_types`.
+
+Prefer HTTP? Run the same engine as a REST API (`npm run verify-api`) — see
+[docs/API.md](docs/API.md), with a live playground at `/` and OpenAPI at
+`/api/openapi.json`.
+
+---
+
 ## Quick start
 
 ```bash

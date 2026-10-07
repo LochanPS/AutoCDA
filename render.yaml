@@ -22,3 +22,14 @@ services:
       - key: ANON_RATE_LIMIT
         value: "30"
       # Add keys later for higher limits, e.g. API_KEYS=key1=600,key2
+      # Self-serve keys: Render generates a stable secret → POST /api/keys mints
+      # stateless signed keys at the keyed tier (no database needed).
+      - key: KEY_SIGNING_SECRET
+        generateValue: true
+      # Keep-warm: self-ping the PUBLIC health URL every 10 min (< the ~15 min
+      # idle window) so a running free instance keeps serving external traffic and
+      # doesn't spin down. (A GitHub Actions cron also pings it as a cold backup.)
+      - key: KEEP_WARM_MS
+        value: "600000"
+      - key: KEEP_WARM_URL
+        value: https://autocda-verify-api.onrender.com/api/health

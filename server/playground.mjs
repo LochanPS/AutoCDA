@@ -108,7 +108,7 @@ export const PLAYGROUND_HTML = `<!doctype html>
 </style></head>
 <body><div class="wrap">
   <h1>AutoCDA Verification API</h1>
-  <p class="sub">The SPICE-verified truth layer for analog design. Type an intent → get a real-ngspice-verified, buyable design. <a href="/api/openapi.json">OpenAPI</a> · <a href="https://github.com/">docs</a></p>
+  <p class="sub">The SPICE-verified truth layer for analog design. Type an intent → get a real-ngspice-verified, buyable design. <a href="/api/openapi.json">OpenAPI</a> · <a href="/benchmark">benchmark</a> · <a href="https://github.com/LochanPS/AutoCDA">source</a></p>
 
   <div class="card">
     <label>Intent (plain English)</label>

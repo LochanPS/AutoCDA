@@ -1,0 +1,42 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AutoCDA — Benchmark</title>
+<style>
+ :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--text2:#9da7b3;--text3:#6e7681;--accent:#2f81f7;--ok:#3fb950;--mono:ui-monospace,Menlo,monospace}
+ *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 -apple-system,Segoe UI,Roboto,sans-serif}
+ .wrap{max-width:860px;margin:0 auto;padding:30px 18px 64px}
+ h1{font-size:23px;margin:0 0 4px}.sub{color:var(--text2);margin:0 0 24px}
+ h2{font-size:16px;margin:26px 0 10px}
+ .cards{display:flex;flex-wrap:wrap;gap:16px;margin:8px 0 6px}
+ .c{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;min-width:150px}
+ .c b{display:block;font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em}
+ .c span{font:700 26px/1.2 var(--mono)}
+ table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+ th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:14px}
+ th{color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+ td.n{text-align:right;font-family:var(--mono)}.ok{color:var(--ok)}.muted{color:var(--text3)}
+ a{color:var(--accent)}.foot{color:var(--text3);font-size:12px;margin-top:26px}
+</style></head><body><div class="wrap">
+ <h1>AutoCDA — Benchmark</h1>
+ <p class="sub">How well the truth layer parses intent and converges to a verified, buyable design. <a href="/">playground</a> · <a href="/api/openapi.json">API</a></p>
+
+ <div class="cards">
+  <div class="c"><b>Circuit types</b><span>22</span></div>
+  <div class="c"><b>Dataset</b><span>559</span></div>
+  <div class="c"><b>Type accuracy</b><span class="ok">85.2%</span></div>
+  <div class="c"><b>Exact match</b><span class="ok">85%</span></div>
+ </div>
+
+ <h2>Intent parsing (regex fast path, by difficulty)</h2>
+ <table><thead><tr><th>Difficulty</th><th class="n">n</th><th class="n">Type acc.</th><th class="n">Exact</th></tr></thead><tbody><tr><td>easy</td><td class="n">187</td><td class="n">99.5%</td><td class="n">99.5%</td></tr><tr><td>medium</td><td class="n">200</td><td class="n">96%</td><td class="n">95.5%</td></tr><tr><td>hard</td><td class="n">172</td><td class="n">57%</td><td class="n">57%</td></tr></tbody></table>
+ <p class="muted" style="font-size:12px;margin-top:6px">The deployed parser routes to an LLM when the regex is unsure, lifting the hard/colloquial tail; the figures above are the offline regex alone.</p>
+
+ <h2>Design-loop convergence (SPICE-graded, CI-enforced)</h2>
+ <table><thead><tr><th>Tolerance</th><th class="n">Converged</th><th>How</th></tr></thead><tbody><tr><td>≤ 5%</td><td class="n ok">100%</td><td class="muted">even from a 64× off seed</td></tr><tr><td>≤ 2%</td><td class="n ok">100%</td><td class="muted">via the E96 resistor trim</td></tr><tr><td>≤ 1%</td><td class="n ok">100%</td><td class="muted">via the joint two-component trim</td></tr></tbody></table>
+ <p class="muted" style="font-size:12px;margin-top:6px">Guarantees asserted by the test suite over every verifiable type, from good and poor seeds (reasoningStress.test.js).</p>
+
+ <h2>Sample measured-vs-target (real ngspice)</h2>
+ <table><thead><tr><th>Type</th><th>Target</th><th class="n">Measured</th><th class="n">Error</th></tr></thead><tbody><tr><td>rc_lowpass</td><td>fc 2 kHz</td><td class="n">1988.8 Hz</td><td class="n ok">0.56%</td></tr><tr><td>instrumentation_amp</td><td>Av 100</td><td class="n">100.99</td><td class="n ok">0.99%</td></tr><tr><td>current_mirror</td><td>I 10 mA</td><td class="n">10.16 mA</td><td class="n ok">1.6%</td></tr><tr><td>rc_oscillator</td><td>f 1 kHz</td><td class="n">982.2 Hz</td><td class="n ok">1.78%</td></tr></tbody></table>
+
+ <p class="foot">Generated 2026-10-07 by <code>scripts/benchmark.mjs</code> — reproduce with <code>npm run benchmark</code>. Parser numbers computed live over the labelled dataset; convergence figures are CI-enforced; measurements are real in-browser/server ngspice.</p>
+</div></body></html>

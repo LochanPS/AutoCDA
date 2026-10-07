@@ -42,6 +42,7 @@
 import http from "node:http";
 import httpsMod from "node:https";
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { SUPPORTED_TYPES, listTypes, runParse, runVerify, runCompose } from "./apiCore.mjs";
 import { PLAYGROUND_HTML, OPENAPI } from "./playground.mjs";
 
@@ -103,11 +104,41 @@ for (const entry of (process.env.API_KEYS || "").split(",").map((s) => s.trim())
   if (k) KEY_LIMITS.set(k.trim(), lim ? Number(lim) : KEYED_DEFAULT);
 }
 
+// ── self-serve keys (HMAC-signed, stateless) ───────────────────────────────────
+// Set KEY_SIGNING_SECRET to enable POST /api/keys: it mints `ak_<rand>_<sig>` keys
+// that the server validates by recomputing the HMAC — no database, no per-key row,
+// works on a free/ephemeral host. Every signed key gets the KEYED_DEFAULT limit.
+// Static API_KEYS still work and can carry custom per-key limits.
+const KEY_SIGNING_SECRET = process.env.KEY_SIGNING_SECRET || "";
+const SELF_SERVE = !!KEY_SIGNING_SECRET;
+
+function signPart(rand) {
+  return crypto.createHmac("sha256", KEY_SIGNING_SECRET).update(rand).digest("base64url").slice(0, 24);
+}
+function mintKey() {
+  const rand = crypto.randomBytes(18).toString("base64url");
+  return `ak_${rand}_${signPart(rand)}`;
+}
+function isValidSignedKey(key) {
+  if (!SELF_SERVE || typeof key !== "string") return false;
+  const m = /^ak_([A-Za-z0-9_-]+)_([A-Za-z0-9_-]+)$/.exec(key);
+  if (!m) return false;
+  const expected = signPart(m[1]);
+  const got = m[2];
+  if (got.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
 function callerFrom(req) {
   const raw = req.headers["x-api-key"] || String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   const key = String(raw).trim();
   if (key) {
     if (KEY_LIMITS.has(key)) return { id: "key:" + key, tier: "keyed", limit: KEY_LIMITS.get(key) };
+    if (isValidSignedKey(key)) return { id: "key:" + key, tier: "keyed", limit: KEYED_DEFAULT };
     return { invalidKey: true };
   }
   const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "anon";
@@ -173,6 +204,15 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...cors });
     return res.end(PLAYGROUND_HTML);
   }
+  if (req.method === "GET" && url.pathname === "/benchmark") {
+    try {
+      const file = new URL("../docs/benchmark.html", import.meta.url);
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...cors });
+      return res.end(fs.readFileSync(file));
+    } catch {
+      return send(404, { ok: false, error: "benchmark page not generated — run `npm run benchmark`" });
+    }
+  }
   if (req.method === "GET" && url.pathname === "/api/openapi.json")
     return send(200, OPENAPI);
   if (req.method === "GET" && url.pathname === "/api")
@@ -181,8 +221,9 @@ const server = http.createServer(async (req, res) => {
       service: "autocda-verify-api",
       playground: "/",
       openapi: "/api/openapi.json",
-      endpoints: ["/api/health", "/api/types", "/api/usage", "POST /api/parse", "POST /api/verify", "POST /api/compose"],
+      endpoints: ["/api/health", "/api/types", "/api/usage", "POST /api/keys", "POST /api/parse", "POST /api/verify", "POST /api/compose"],
       auth: "send x-api-key: <key> or Authorization: Bearer <key>; no key = free anonymous tier",
+      ...(SELF_SERVE ? { getKey: "POST /api/keys to mint a free keyed-tier key" } : {}),
     });
 
   // Identify + authenticate caller.
@@ -205,6 +246,24 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/api/usage")
     return send(200, { ok: true, tier: caller.tier, limit: caller.limit, used: usage.get(caller.id) || 0, windowRemaining: rl.remaining }, rlHeaders);
+
+  // Self-serve key issuance (stateless HMAC keys). Rate-limited by the anon bucket
+  // above, so a single IP can't mint without bound. Disabled unless a signing
+  // secret is configured.
+  if (req.method === "POST" && url.pathname === "/api/keys") {
+    if (!SELF_SERVE)
+      return send(503, { ok: false, error: "self-serve keys are not enabled on this instance (set KEY_SIGNING_SECRET)" }, rlHeaders);
+    const key = mintKey();
+    return send(200, {
+      ok: true,
+      key,
+      tier: "keyed",
+      limit: KEYED_DEFAULT,
+      window_ms: WINDOW_MS,
+      usage: "send it as `x-api-key: <key>` or `Authorization: Bearer <key>`",
+      note: "stateless signed key — keep it; there is no way to recover a lost key, just mint another",
+    }, rlHeaders);
+  }
 
   if (req.method === "GET" && url.pathname === "/api/types")
     return send(200, listTypes(), rlHeaders);

@@ -35,6 +35,18 @@ Every response past `/api/health` carries `x-ratelimit-limit`,
 | anonymous | no key | 10 / min |
 | keyed | `x-api-key` | 120 / min (per key, configurable) |
 
+**Get a key, self-serve** (when the instance has `KEY_SIGNING_SECRET` set):
+
+```bash
+curl -s -X POST http://localhost:3002/api/keys
+# → { "key": "ak_…", "tier": "keyed", "limit": 120 }
+```
+
+Keys are **stateless HMAC-signed tokens** — the server validates them by
+recomputing the signature, so there's no database and no sign-up form. Keep the
+key; a lost key can't be recovered, just mint another. Then send it:
+`-H "x-api-key: ak_…"`.
+
 Server config is all environment variables (see the header of
 `server/apiServer.mjs`): `API_KEYS`, `KEYED_RATE_LIMIT`, `ANON_RATE_LIMIT`,
 `RATE_WINDOW_MS`, `CORS_ORIGIN`, `USAGE_FILE`, `KEEP_WARM_MS`.
@@ -51,6 +63,7 @@ Server config is all environment variables (see the header of
 | GET | `/api/health` | Liveness + type count (no auth, no limit) |
 | GET | `/api/types` | Supported types + their target fields |
 | GET | `/api/usage` | Your tier, limit, usage |
+| POST | `/api/keys` | Mint a free keyed-tier key (if enabled) |
 | POST | `/api/parse` | Intent → CircuitSpec (no simulation) |
 | POST | `/api/verify` | Design + SPICE-verify (the main call) |
 | POST | `/api/compose` | Cascade stages, measured end-to-end |
