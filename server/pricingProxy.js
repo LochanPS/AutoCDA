@@ -15,6 +15,10 @@
  *   MOUSER_API_KEY=...            (mouser.com/api-hub — single Search API key)
  *   DIGIKEY_CLIENT_ID=...         (developer.digikey.com — OAuth2 client creds)
  *   DIGIKEY_CLIENT_SECRET=...
+ *   ELEMENT14_API_KEY=...         (partner.element14.com — Product Search API key)
+ *   ELEMENT14_STORE=in.element14.com  (region store; in.* returns INR, for India)
+ *   LCSC_API_URL=...              (your LCSC price endpoint; ?mpn=.. -> JSON price)
+ *   LCSC_API_KEY=...              (optional, sent as x-api-key to LCSC_API_URL)
  *
  * Run:  node server/pricingProxy.js   (Node 18+, uses global fetch)
  * API:  GET /api/pricing?mpn=...  ->  { mpn, offers:[...], best:{...}, count }
@@ -131,9 +135,63 @@ async function lookupDigikey(mpn) {
   return { source: "digikey", unitPrice: b.price, currency: b.currency || "USD", stock: parseStock(p.QuantityAvailable), link: p.ProductUrl || null };
 }
 
+// ── element14 / Farnell / Newark (public Product Search API) ───────────────────
+// One API key, region chosen by store id. For India use ELEMENT14_STORE=in.element14.com.
+// Docs: partner.element14.com — GET /catalog/products?term=manuPartNum:<mpn>
+async function lookupElement14(mpn) {
+  const key = process.env.ELEMENT14_API_KEY;
+  if (!key) return null;
+  const store = process.env.ELEMENT14_STORE || "in.element14.com";
+  const url = `https://api.element14.com/catalog/products?term=manuPartNum:${encodeURIComponent(mpn)}`
+    + `&storeInfo.id=${encodeURIComponent(store)}&resultsSettings.offset=0&resultsSettings.numberOfResults=1`
+    + `&resultsSettings.responseGroup=Prices&callInfo.responseDataFormat=json&callInfo.apiKey=${encodeURIComponent(key)}`;
+  const res = await fetch(url, { headers: { accept: "application/json" } });
+  if (!res.ok) throw new Error(`element14 HTTP ${res.status}`);
+  const d = await res.json();
+  const p = d?.manufacturerPartNumberSearchReturn?.products?.[0] || d?.premierFarnellPartNumberReturn?.products?.[0];
+  if (!p) return null;
+  const b = lowestBreak((p.prices || []).map((x) => ({ qty: x.from, price: x.cost })));
+  if (!b) return null;
+  const leadDays = Number(p.datasheets ? undefined : p.leadTime) || (p.stock && p.stock.leastLeadTime) || null;
+  return {
+    source: "element14",
+    unitPrice: b.price,
+    currency: p.prices?.[0]?.currency || (store.startsWith("in.") ? "INR" : "USD"),
+    stock: parseStock(p.stock?.level),
+    leadDays: leadDays != null ? Number(leadDays) : null,
+    link: p.productUrl || (p.sku ? `https://${store}/w/search?st=${encodeURIComponent(mpn)}` : null),
+  };
+}
+
+// ── LCSC (configurable endpoint; their public API is partner-gated) ────────────
+// Set LCSC_API_URL to an endpoint that accepts ?mpn=<mpn> and returns JSON with a
+// unit price. Inert without it. Shapes tolerated: {price|unitPrice}, {stock}, {url}.
+async function lookupLCSC(mpn) {
+  const base = process.env.LCSC_API_URL;
+  if (!base) return null;
+  const headers = { accept: "application/json" };
+  if (process.env.LCSC_API_KEY) headers["x-api-key"] = process.env.LCSC_API_KEY;
+  const sep = base.includes("?") ? "&" : "?";
+  const res = await fetch(`${base}${sep}mpn=${encodeURIComponent(mpn)}`, { headers });
+  if (!res.ok) throw new Error(`LCSC HTTP ${res.status}`);
+  const d = await res.json();
+  const price = parsePrice(d.unitPrice ?? d.price ?? lowestBreak(d.priceBreaks || d.prices)?.price);
+  if (price == null) return null;
+  return {
+    source: "lcsc",
+    unitPrice: price,
+    currency: d.currency || "USD",
+    stock: parseStock(d.stock ?? d.stockNumber),
+    leadDays: d.leadDays != null ? Number(d.leadDays) : null,
+    link: d.url || d.productUrl || null,
+  };
+}
+
 // ── aggregate ─────────────────────────────────────────────────────────────────
 async function lookupAll(mpn) {
-  const results = await Promise.allSettled([lookupMouser(mpn), lookupDigikey(mpn)]);
+  const results = await Promise.allSettled([
+    lookupMouser(mpn), lookupDigikey(mpn), lookupElement14(mpn), lookupLCSC(mpn),
+  ]);
   const offers = results
     .filter((r) => r.status === "fulfilled" && r.value)
     .map((r) => ({ ...r.value, link: applyAffiliate(r.value.source, r.value.link) }));
@@ -160,8 +218,13 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  const dists = [process.env.MOUSER_API_KEY && "Mouser", (process.env.DIGIKEY_CLIENT_ID && process.env.DIGIKEY_CLIENT_SECRET) && "Digi-Key"].filter(Boolean);
-  const aff = ["MOUSER", "DIGIKEY", "LCSC"].filter((k) => process.env[`AFFILIATE_${k}`] || process.env[`AFFILIATE_${k}_TEMPLATE`]);
+  const dists = [
+    process.env.MOUSER_API_KEY && "Mouser",
+    (process.env.DIGIKEY_CLIENT_ID && process.env.DIGIKEY_CLIENT_SECRET) && "Digi-Key",
+    process.env.ELEMENT14_API_KEY && "element14",
+    process.env.LCSC_API_URL && "LCSC",
+  ].filter(Boolean);
+  const aff = ["MOUSER", "DIGIKEY", "LCSC", "ELEMENT14"].filter((k) => process.env[`AFFILIATE_${k}`] || process.env[`AFFILIATE_${k}_TEMPLATE`]);
   // eslint-disable-next-line no-console
   console.log(`[pricingProxy] http://localhost:${PORT}/api/pricing — distributors: ${dists.length ? dists.join(", ") : "NONE (set MOUSER_API_KEY / DIGIKEY_CLIENT_ID+SECRET)"}`);
   // eslint-disable-next-line no-console
