@@ -4,20 +4,20 @@
   "description": "The SPICE-verified truth layer for analog circuit design — an MCP server (and HTTP API) that turns a plain-English intent into a real-ngspice-verified, buyable circuit. Lets an AI agent verify component values instead of hallucinating them.",
   "keywords": ["mcp", "model-context-protocol", "spice", "ngspice", "analog", "circuit", "eda", "verification", "ai-agent", "claude"],
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/LochanPS/AutoCDA.git" },
+  "repository": { "type": "git", "url": "git+https://github.com/LochanPS/AutoCDA.git" },
   "homepage": "https://auto-cda-phi.vercel.app/",
   "bin": {
-    "autocda-verify-mcp": "server/mcpBin.mjs"
+    "autocda-verify-mcp": "dist/mcp.mjs"
   },
   "files": [
-    "server",
-    "src",
+    "dist",
     "docs/API.md"
   ],
   "dependencies": {
     "eecircuit-engine": "^1.8.0"
   },
   "devDependencies": {
+    "esbuild": "^0.24.0",
     "lz-string": "^1.5.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -27,6 +27,8 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "build:mcp": "node scripts/buildMcp.mjs",
+    "prepack": "node scripts/buildMcp.mjs",
     "pricing-proxy": "node server/pricingProxy.js",
     "verify-api": "node --import ./server/loader.mjs server/apiServer.mjs",
     "mcp": "node --import ./server/loader.mjs server/mcpServer.mjs",

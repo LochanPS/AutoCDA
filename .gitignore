@@ -11,3 +11,6 @@ scratchpad/
 
 # Pro signing private key — never commit
 .secrets/
+
+# MCP bundle (built by prepack)
+dist/

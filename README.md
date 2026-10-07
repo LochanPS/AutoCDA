@@ -191,3 +191,91 @@ schematic capture); BOM catalog is static unless the Mouser proxy is wired;
 SPICE runs client-side in the browser. The `current_source` uses ngspice's basic
 MOSFET model (verification, not device-accurate). Sub-0.5% tolerance uses
 series/parallel synthesis and is not guaranteed for every target.
+
+---
+
+## Maintainer — publish & operate (runbook)
+
+All commands run from the repo root. Copy-paste, no LLM needed.
+
+### A. Publish the MCP package to npm
+
+The published artifact is a single bundled file (`dist/mcp.mjs`, built
+automatically by the `prepack` script via esbuild). First, get the tooling and
+confirm the tarball is clean (should list **5 files**, ~44 kB):
+
+```bash
+npm install
+npm pack --dry-run
+```
+
+npm now **requires 2FA (or a bypass token) to publish** — that was the `E403` you
+hit. Pick ONE:
+
+**Option 1 — 2FA + one-time code (simplest):**
+1. On npmjs.com: avatar → **Account** → **Two-Factor Authentication** → enable
+   **"Authorization and Publishing"** with an authenticator app (Google
+   Authenticator, 1Password, etc.).
+2. Publish, passing the 6-digit code from the app:
+   ```bash
+   npm publish --access public --otp=123456
+   ```
+
+**Option 2 — Granular access token (no code each time, good for CI):**
+1. npmjs.com → avatar → **Access Tokens** → **Generate New Token** → **Granular
+   Access Token**. Set **Packages and scopes = Read and write**, and enable
+   **"Bypass 2FA"**. Copy the token (starts with `npm_`).
+2. Publish with it:
+   ```bash
+   NPM_TOKEN=npm_xxx npm publish --access public \
+     --//registry.npmjs.org/:_authToken=npm_xxx
+   ```
+   (Or `npm config set //registry.npmjs.org/:_authToken npm_xxx` once, then
+   `npm publish --access public`.)
+
+Verify it's live, then anyone installs it in one line:
+
+```bash
+npx -y autocda-verify-mcp
+```
+
+To ship an update later: bump the version and republish:
+
+```bash
+npm version patch   # 1.0.0 -> 1.0.1
+npm publish --access public --otp=123456
+```
+
+### B. Render — turn on self-serve keys + keep-warm (one-time)
+
+`render.yaml` already declares the new settings, but Render does **not** auto-apply
+Blueprint env changes to an existing service — do this once in the dashboard:
+
+1. Render dashboard → the **autocda-verify-api** service → **Environment**.
+2. Click **"Sync"** if it offers to apply the Blueprint, **or** add these vars by
+   hand:
+   - `KEY_SIGNING_SECRET` → click **Generate** (any long random value) — enables
+     `POST /api/keys`.
+   - `KEEP_WARM_MS` → `600000`
+   - `KEEP_WARM_URL` → `https://autocda-verify-api.onrender.com/api/health`
+3. **Save** → the service redeploys. Confirm:
+   ```bash
+   curl -s -X POST https://autocda-verify-api.onrender.com/api/keys
+   # → { "ok": true, "key": "ak_…", "tier": "keyed", ... }
+   ```
+
+Code changes (D3/D4, playground, benchmark) deploy automatically on every push to
+`main` (`autoDeploy: true`).
+
+### C. GitHub Actions — keep-warm backup (automatic)
+
+`.github/workflows/keepwarm.yml` pings the API every ~10 min as a cold backup. It
+runs automatically once on `main`. If Actions are disabled for the repo: GitHub →
+repo **Settings** → **Actions** → **General** → allow actions. (GitHub pauses
+scheduled workflows after 60 days of no repo activity — a push resumes them.)
+
+### That's it
+
+Nothing else is required. Optional, after publishing: list the package in public
+MCP directories and post the `npx` one-liner. The Vercel web app needs no action —
+it redeploys from `main` on its own.
