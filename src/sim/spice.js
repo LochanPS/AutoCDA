@@ -28,7 +28,6 @@
  *   }
  */
 
-import { Simulation } from "eecircuit-engine";
 import { measureCutoff, measureGain, measureDC } from "./measure";
 
 // Re-export the pure analyzers so existing `import ... from "../sim/spice"` works.
@@ -41,10 +40,15 @@ let _startPromise = null;
 export async function initSpice() {
   if (_sim) return _sim;
   if (!_startPromise) {
-    const sim = new Simulation();
-    _startPromise = sim
-      .start()
-      .then(() => {
+    // Dynamic import so the ngspice-wasm engine (eecircuit-engine) lands in its
+    // own async chunk (Theme E4): the landing page stays light and the engine
+    // only downloads on the first simulation.
+    _startPromise = import("eecircuit-engine")
+      .then(({ Simulation }) => {
+        const sim = new Simulation();
+        return sim.start().then(() => sim);
+      })
+      .then((sim) => {
         _sim = sim;
         return sim;
       })
@@ -85,11 +89,16 @@ function parseResult(result, errors) {
   const sweepEntry =
     data.find((d) => d.type === "frequency" || d.type === "time") || data[0];
 
+  // AC results are complex → store magnitude. DC/transient results are real and
+  // must keep their SIGN: a transient node voltage is a bipolar waveform, and
+  // rectifying it with Math.abs() would double an oscillator's apparent frequency
+  // and inject a phantom DC offset (and mis-plot every transient trace). Only
+  // complex (AC) data takes the magnitude; real data is passed through signed.
   const nodes = {};
   const nodesComplex = {};
   for (const d of data) {
     if (d === sweepEntry) continue;
-    nodes[d.name] = d.values.map(magnitude);
+    nodes[d.name] = d.values.map(complex ? magnitude : realOf);
     if (complex) nodesComplex[d.name] = d.values.map((v) => ({ ...v }));
   }
 

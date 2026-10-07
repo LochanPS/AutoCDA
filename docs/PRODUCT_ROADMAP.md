@@ -120,12 +120,18 @@ its cheapest price across all of them. This is the design→buy bridge.*
 
 *BUSINESS.md's #1 wedge by leverage: be the SPICE-verified endpoint any AI/tool calls.*
 
-- **D1. MCP server.** Expose `/api/verify`, `/api/parse`, `/api/compose` as an MCP
-  tool so any agent (Claude, etc.) can verify a circuit mid-reasoning. "The circuit
-  truth-layer for AI" — first-class, not an afterthought.
-- **D2. Warm + reliable.** Kill the free-tier cold start for real API users (keep-warm
-  ping or a paid always-on instance); durable per-key usage counts (`USAGE_FILE` on a
-  mounted disk) so limits survive restarts.
+- **D1. MCP server.** ✅ *shipped* — `server/mcpServer.mjs` (`npm run mcp`): a stdio
+  JSON-RPC MCP server exposing `verify_circuit`, `parse_prompt`, `compose_circuit`,
+  and `list_circuit_types` so any MCP agent (Claude Desktop/Code, Cursor, …) can
+  SPICE-verify a circuit mid-reasoning. Runs in-process (ngspice, no network, no cold
+  start); the model proposes, the simulator decides. Shares one core
+  (`server/apiCore.mjs`) with the HTTP API so a verify over MCP and over HTTP agree —
+  "the circuit truth-layer for AI," first-class. Tool calls are serialized (the wasm
+  engine is non-reentrant).
+- **D2. Warm + reliable.** ✅ *shipped* — self keep-warm pinger (`KEEP_WARM_MS` /
+  `KEEP_WARM_URL`) defeats idle spin-down on Render/HF for real callers; durable per-key
+  usage counts (`USAGE_FILE`) now persist **only keyed callers** so the file stays
+  bounded and keyed limits survive restarts (anon-IP counts stay in memory).
 - **D3. Richer API responses.** Return the new metrics (Theme B) + sourcing (Theme C)
   so one call gives verified design **and** buyable, priced BOM.
 - **D4. Great docs + examples + SDKs.** The API is developer-led growth; the docs page
@@ -174,11 +180,20 @@ free tool retains users.*
    delivers the design→buy vision and is mostly plumbing behind an existing interface.
 2. **B1** — transient/FFT measurement. Removes the two analytical-only asterisks;
    makes "everything is really verified" true.
-3. **A1 + A3** — a few high-demand new blocks + LLM-propose→verify. Attacks the
-   breadth risk that gates "the tool you always open."
-4. **D1 + D2** — MCP server + warm/reliable API. Opens the highest-leverage wedge
-   (AI truth-layer) with low marginal cost.
-5. **E1 + E4** — download/upload designs + bundle trim. Cheap robustness wins.
+3. **A1 + A3** ✅ *shipped* — added MFB low-pass, 3-op-amp instrumentation amp,
+   and BJT current mirror (each with its own SPICE descriptor + verify loop), plus
+   `topologyAgent` (`src/agents/topologyAgent.js`): an LLM proposes a topology —
+   a built-in type or a raw parametric netlist — and it is **accepted only if the
+   deterministic verify path grades it within tolerance** (the simulator, not the
+   model, decides). Attacks the breadth risk that gates "the tool you always open."
+4. **D1 + D2** ✅ *shipped* — MCP server (`server/mcpServer.mjs`, `npm run mcp`) +
+   warm/reliable API (keep-warm pinger, keyed-only durable usage). Opens the
+   highest-leverage wedge (AI truth-layer) with low marginal cost.
+5. **E1 + E4** ✅ *shipped* — portable `.autocda.json` design files
+   (download/open, `src/share/designFile.js`) + bundle trim: the ngspice-wasm
+   engine and recharts now load as on-demand async chunks, dropping the main
+   bundle from ~5.9 MB to **121 kB gzip** (the engine/charts fetch only when a
+   user runs a sim or opens a chart). Reduced-motion + WCAG-AA already held.
 
 > Let real usage reorder this. The discipline from GO_TO_MARKET.md still holds: ship
 > the free tool, get it in front of people, and let what they actually ask for — not

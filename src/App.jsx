@@ -1,20 +1,26 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import "./App.css";
 import SchematicPanel from "./components/SchematicPanel";
-import GraphPanel from "./components/GraphPanel";
 import ComponentTable from "./components/ComponentTable";
 import ExplanationPanel from "./components/ExplanationPanel";
 import CircuitJSPanel from "./components/CircuitJSPanel";
 import SpecCard from "./components/SpecCard";
 import ErrorBoundary from "./components/ErrorBoundary";
-import NetlistImport from "./components/NetlistImport";
-import ChainBuilder from "./components/ChainBuilder";
+
+// Code-split the recharts-heavy panels (Theme E4): GraphPanel, the netlist
+// importer, and the chain builder all pull recharts, so lazy-loading them (plus
+// the Monte-Carlo Histogram below) keeps recharts out of the main bundle.
+const GraphPanel = React.lazy(() => import("./components/GraphPanel"));
+const NetlistImport = React.lazy(() => import("./components/NetlistImport"));
+const ChainBuilder = React.lazy(() => import("./components/ChainBuilder"));
+const Histogram = React.lazy(() => import("./components/Histogram"));
 
 import { parsePrompt } from "./utils/circuitParser";
 import { parseFallback } from "./parse/parseFallback";
 import { applyFollowup } from "./parse/followup";
 import { buildShareUrl, encodeDesign, readDesignFromHash, HASH_KEY } from "./share/designLink";
 import { listDesigns, saveDesign, deleteDesign } from "./share/designStore";
+import { toDesignFile, parseDesignFile, designFileName } from "./share/designFile";
 import { makeSpec, SUPPORTED_TYPES } from "./spec/circuitSpec";
 import { recalculateFromComponents, formatResistance, formatCapacitance } from "./utils/circuitFormulas";
 import { designAndVerify } from "./design/loop";
@@ -46,8 +52,6 @@ if (process.env.NODE_ENV === "development") {
   import("./eval/designBenchmark");
   import("./eval/reasoningLoop");
 }
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-
 // Static fallback data (for kicadSchematic / kicadNetlist fields)
 import rcLowpassStatic from "./circuits/rc_lowpass";
 import rcHighpassStatic from "./circuits/rc_highpass";
@@ -96,6 +100,11 @@ const TABS = [
 // Tabs with long, free-flowing content size to their content and scroll with
 // the page. The canvas tabs (schematic/response/live sim) keep a fixed height.
 const AUTO_TABS = new Set(["details", "bom", "yield", "optimize", "buildlog"]);
+
+// Fallback shown while a lazily-loaded (code-split) panel's chunk downloads.
+const panelFallback = (
+  <div style={{ padding: "24px", color: "var(--text-3)", fontSize: "var(--fs-sm)" }}>Loading…</div>
+);
 
 // ── verification formatting helpers (Phase 2.3) ──────────────────────────────
 
@@ -373,6 +382,35 @@ export default function App() {
     loadDesignPayload(rec.design, rec.name);
   }, [loadDesignPayload]);
 
+  // E1: download the current design as a portable .autocda.json file.
+  const handleDownloadDesign = useCallback(() => {
+    if (!selectedCircuit) return;
+    const name = designName(selectedCircuit);
+    const text = toDesignFile(currentDesign(selectedCircuit), { name });
+    downloadText(designFileName(name), text, "application/json;charset=utf-8");
+    showToast("Design file downloaded");
+  }, [selectedCircuit, showToast]);
+
+  // E1: open a .autocda.json from disk → re-verify it like a shared link.
+  const handleOpenDesignFile = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.onchange = () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const res = parseDesignFile(String(reader.result || ""));
+        if (!res.ok) { setParseError(res.error); return; }
+        loadDesignPayload(res.design, `Opened ${file.name}`);
+      };
+      reader.onerror = () => setParseError("Couldn’t read that file.");
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [loadDesignPayload]);
+
   const handleDeleteSaved = useCallback((id) => {
     setSavedDesigns(deleteDesign(id));
   }, []);
@@ -513,11 +551,11 @@ export default function App() {
 
       {mode === "import" ? (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "auto", padding: "16px" }}>
-          {isPro ? <NetlistImport /> : <ProUpsell feature="Netlist import" note="Import an external SPICE netlist and verify it. Core design + verification stays free." />}
+          {isPro ? <Suspense fallback={panelFallback}><NetlistImport /></Suspense> : <ProUpsell feature="Netlist import" note="Import an external SPICE netlist and verify it. Core design + verification stays free." />}
         </div>
       ) : mode === "chain" ? (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "auto", padding: "16px" }}>
-          {isPro ? <ChainBuilder /> : <ProUpsell feature="Build-a-chain" note="Cascade verified stages into multi-stage circuits, measured end-to-end. Core design + verification stays free." />}
+          {isPro ? <Suspense fallback={panelFallback}><ChainBuilder /></Suspense> : <ProUpsell feature="Build-a-chain" note="Cascade verified stages into multi-stage circuits, measured end-to-end. Core design + verification stays free." />}
         </div>
       ) : (
       <div className="app-row" style={{ display: "flex", flex: 1, overflow: "hidden", padding: "16px", gap: "16px", minHeight: 0 }}>
@@ -600,6 +638,22 @@ export default function App() {
               />
             )}
 
+            <button
+              onClick={handleOpenDesignFile}
+              disabled={loading || resolving}
+              title="Open a .autocda.json design file from your device"
+              style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)",
+                color: "var(--text-2)", fontSize: "var(--fs-sm)", fontWeight: 600, padding: "8px 12px",
+                cursor: loading || resolving ? "not-allowed" : "pointer", opacity: loading || resolving ? 0.6 : 1,
+              }}
+              onMouseEnter={(e) => { if (!(loading || resolving)) { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; } }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-2)"; }}
+            >
+              <IconUpload /> Open design file
+            </button>
+
             <MyDesigns
               items={savedDesigns}
               onLoad={handleLoadSaved}
@@ -622,7 +676,7 @@ export default function App() {
             >
             <div key={selectedCircuit.id + (selectedCircuit.verification?.iterations ?? "")} className="fade-in result-view" style={{ display: "flex", flexDirection: "column", gap: "14px", minHeight: 0, flex: 1 }}>
               <ResultSummary circuit={selectedCircuit} />
-              <DesignActions onShare={handleShare} onSave={handleSaveDesign} toast={toast} />
+              <DesignActions onShare={handleShare} onSave={handleSaveDesign} onDownload={handleDownloadDesign} toast={toast} />
               {lastChange && <BeforeAfter change={lastChange} />}
               <RefineBar
                 value={refineText}
@@ -637,7 +691,9 @@ export default function App() {
                   <SchematicPanel circuit={selectedCircuit} visible />
                 )}
                 {activeTab === "response" && (
-                  <GraphPanel circuit={selectedCircuit} visible />
+                  <Suspense fallback={panelFallback}>
+                    <GraphPanel circuit={selectedCircuit} visible />
+                  </Suspense>
                 )}
                 {activeTab === "livesim" && (
                   <CircuitJSPanel circuit={selectedCircuit} visible />
@@ -913,6 +969,20 @@ function IconSave({ size = 14 }) {
     </svg>
   );
 }
+function IconDownload({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 2.5v7" /><path d="M5 7l3 3 3-3" /><path d="M3 12.5h10" />
+    </svg>
+  );
+}
+function IconUpload({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 10.5v-7" /><path d="M5 6l3-3 3 3" /><path d="M3 12.5h10" />
+    </svg>
+  );
+}
 
 const actionBtn = {
   display: "inline-flex", alignItems: "center", gap: "6px",
@@ -920,7 +990,7 @@ const actionBtn = {
   color: "var(--text)", fontSize: "var(--fs-sm)", fontWeight: 600, padding: "7px 13px", cursor: "pointer",
 };
 
-function DesignActions({ onShare, onSave, toast }) {
+function DesignActions({ onShare, onSave, onDownload, toast }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
       <button style={actionBtn} onClick={onShare}
@@ -932,6 +1002,11 @@ function DesignActions({ onShare, onSave, toast }) {
         onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text)"; }}>
         <IconSave /> Save
+      </button>
+      <button style={actionBtn} onClick={onDownload} title="Download a portable .autocda.json file"
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text)"; }}>
+        <IconDownload /> Download
       </button>
       {toast && (
         <span style={{ fontSize: "var(--fs-xs)", color: "var(--success)", fontWeight: 600 }}>{toast}</span>
@@ -1484,31 +1559,14 @@ function MonteCarloPanel({ circuit }) {
           </div>
 
           <div style={{ height: "220px", width: "100%" }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={result.bins} margin={{ top: 8, right: 12, bottom: 20, left: 4 }}>
-                <XAxis
-                  dataKey="center" type="number" domain={["dataMin", "dataMax"]}
-                  tickFormatter={(x) => fmtTarget(result.targetName, x)}
-                  tick={{ fontSize: 11, fill: "var(--text-3)" }} stroke="var(--border-strong)"
-                  tickLine={false} minTickGap={40}
-                />
-                <YAxis tick={{ fontSize: 11, fill: "var(--text-3)" }} stroke="var(--border-strong)" tickLine={false} allowDecimals={false} width={28} />
-                <Tooltip
-                  cursor={{ fill: "var(--surface-2)" }}
-                  contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }}
-                  labelFormatter={(x) => fmtTarget(result.targetName, x)}
-                  formatter={(val) => [`${val} runs`, "Count"]}
-                />
-                {result.target != null && (
-                  <>
-                    <ReferenceLine x={result.target} stroke="var(--success)" strokeWidth={1.5} strokeDasharray="4 3" />
-                    <ReferenceLine x={result.target * (1 - result.tolerance)} stroke="var(--warn)" strokeDasharray="2 3" />
-                    <ReferenceLine x={result.target * (1 + result.tolerance)} stroke="var(--warn)" strokeDasharray="2 3" />
-                  </>
-                )}
-                <Bar dataKey="count" fill="var(--accent)" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <Suspense fallback={panelFallback}>
+              <Histogram
+                bins={result.bins}
+                target={result.target}
+                tolerance={result.tolerance}
+                fmt={(x) => fmtTarget(result.targetName, x)}
+              />
+            </Suspense>
           </div>
           <div style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)", display: "flex", gap: "16px", flexWrap: "wrap" }}>
             <span><span style={{ color: "var(--success)" }}>—</span> target {fmtTarget(result.targetName, result.target)}</span>
@@ -1554,8 +1612,8 @@ function buyOptionsForRow(r) {
   // Catalog fallback: neutral search at each distributor.
   return DISTRIBUTORS.map((d) => ({ label: d.label, price: null, url: d.search(r.mpn) }));
 }
-function downloadText(filename, text) {
-  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+function downloadText(filename, text, mime = "text/csv;charset=utf-8") {
+  const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = filename;
