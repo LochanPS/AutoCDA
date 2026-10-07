@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "autocda": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "--import",
+        "./server/loader.mjs",
+        "server/mcpServer.mjs"
+      ],
+      "env": {}
+    }
+  }
+}
