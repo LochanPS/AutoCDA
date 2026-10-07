@@ -109,6 +109,13 @@ const CIRCUIT_PATTERNS = [
     defaults: { I: 0.01 },
   },
   {
+    id: 'current_mirror',
+    keywords: ['current mirror', 'mirror', 'widlar', 'wilson mirror'],
+    fields: ['I'],
+    extract: (text) => { const I = extractCurrent(text); return I ? { I } : {}; },
+    defaults: { I: 0.01 },
+  },
+  {
     id: 'sallen_key_highpass',
     keywords: ['sallen-key high', 'sallen key high', 'second order high', 'second-order high',
                '2nd order high', '2nd-order high', 'two pole high', 'two-pole high', 'butterworth high'],
@@ -128,6 +135,15 @@ const CIRCUIT_PATTERNS = [
       const fc = extractFrequency(text);
       return fc ? { fc } : {};
     },
+    defaults: { fc: 1000 },
+  },
+  {
+    // MUST precede rc_lowpass: "mfb low-pass" / "multiple feedback low pass"
+    // contain the substring "low pass", so rc_lowpass would otherwise win.
+    id: 'mfb_lowpass',
+    keywords: ['multiple feedback', 'multiple-feedback', 'mfb', 'infinite gain', 'infinite-gain'],
+    fields: ['fc'],
+    extract: (text) => { const fc = extractFrequency(text); return fc ? { fc } : {}; },
     defaults: { fc: 1000 },
   },
   {
@@ -173,6 +189,15 @@ const CIRCUIT_PATTERNS = [
       return fc ? { fL: fc / Math.sqrt(10), fH: fc * Math.sqrt(10) } : {};
     },
     defaults: { fL: 200, fH: 2000 },
+  },
+  {
+    // MUST precede common_emitter and the greedy 'amplifier'/'amp ' fallbacks:
+    // "instrumentation amplifier" contains "amplifier".
+    id: 'instrumentation_amp',
+    keywords: ['instrumentation', 'instrumentation amp', 'instrumentation amplifier', 'in-amp', 'inamp', 'in amp'],
+    fields: ['Av'],
+    extract: (text) => { const Av = extractGain(text); return Av ? { Av } : {}; },
+    defaults: { Av: 10 },
   },
   {
     id: 'common_emitter',

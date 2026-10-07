@@ -20,6 +20,7 @@
  */
 
 import { measureCutoff, measureGain, measureDC, measureUnityGainFreq } from "../sim/measure";
+import { measureFrequency, measureSettled } from "../sim/transient";
 
 // Plain decimal / scientific notation — ngspice-valid (never unit symbols).
 const num = (v) => Number(Number(v).toPrecision(6)).toString();
@@ -77,7 +78,9 @@ const SIM = {
     dominant: "R1",
     build: (v, t) =>
       `* led limiter\nV1 in 0 DC ${num(t.Vsupply)}\nR1 in a ${num(v.R1)}\nD1 a 0 DLED\n.model DLED D(Is=1e-15 N=1.8 Rs=2)\n.dc V1 ${num(t.Vsupply)} ${num(t.Vsupply)} 1\n.end`,
-    measure: (r) => measureDC(r, "i(v1)"),
+    // i(v1) is the source branch current — negative (current flows into V1's +
+    // node). Node values are now signed, so take |·| for the LED current magnitude.
+    measure: (r) => { const i = measureDC(r, "i(v1)"); return i == null ? null : Math.abs(i); },
   },
   opamp_inverting: {
     targetName: "Av",
@@ -116,14 +119,16 @@ const SIM = {
     targetName: "Vz",
     target: (t) => t.Vz,
     dominant: "R1",
-    // Shunt regulator with a nominal 10 mA load. The zener model's breakdown is
-    // set to the target Vz; the measured output confirms the series R keeps the
-    // diode in regulation (if R1 is too large the output droops below Vz).
+    // Shunt regulator, honestly verified in the *time domain* (B1): the supply
+    // settles to DC and the output is measured once the transient has settled,
+    // with a nominal ~5 mA load. Running .tran (not a one-point .dc) is what lets
+    // the richer line/load-regulation analyzers read the same waveform. The zener
+    // model's breakdown is the target Vz; if R1 is too large the output droops.
     build: (v, t) => {
-      const RL = num((t.Vz || 5) / 0.01);
-      return `* zener shunt regulator\nVin in 0 DC ${num(t.Vin)}\nR1 in out ${num(v.R1)}\nDz 0 out ZD\nRL out 0 ${RL}\n.model ZD D(BV=${num(v.Dz)} IBV=0.005 RS=1)\n.dc Vin ${num(t.Vin)} ${num(t.Vin)} 1\n.end`;
+      const RL = num((t.Vz || 5) / 0.005);
+      return `* zener shunt regulator (transient settle)\nVin in 0 DC ${num(t.Vin)}\nR1 in out ${num(v.R1)}\nDz 0 out ZD\nRL out 0 ${RL}\n.model ZD D(BV=${num(v.Dz)} IBV=0.01 RS=2 N=2)\n.tran 20u 4m uic\n.end`;
     },
-    measure: (r) => measureDC(r, "out"),
+    measure: (r) => measureSettled(r, "out", { tail: 0.1 }),
   },
   sallen_key_lowpass: {
     targetName: "fc",
@@ -201,18 +206,58 @@ const SIM = {
       `* op-amp + nmos constant current sink\nVdd vdd 0 DC 12\nVref ref 0 DC 2\nRload vdd d 1k\nVsense d drain DC 0\nM1 drain gate src src NM\nR1 src 0 ${num(v.R1)}\nE1 gate 0 ref src 100000\n.model NM NMOS(VTO=1 KP=2)\n.op\n.end`,
     measure: (r) => { const dc = measureDC(r, "i(vsense)"); return dc == null ? null : Math.abs(dc); },
   },
+  mfb_lowpass: {
+    targetName: "fc",
+    target: (t) => t.fc,
+    dominant: "R2",
+    // Multiple-feedback 2nd-order low-pass (single inverting ideal op-amp). Five
+    // coupled passives; measure the real -3 dB point. Summing node is `m`.
+    build: (v, t) =>
+      `* mfb low-pass (inverting, ideal op-amp)\nV1 in 0 AC 1\nR1 in a ${num(v.R1)}\nR2 a out ${num(v.R2)}\nR3 a m ${num(v.R3)}\nC1 a out ${num(v.C1)}\nC2 m 0 ${num(v.C2)}\nE1 out 0 0 m 1e6\n.ac dec 100 ${num(t.fc / 100)} ${num(t.fc * 100)}\n.end`,
+    measure: (r) => measureCutoff(r, "out"),
+  },
+  instrumentation_amp: {
+    targetName: "Av",
+    target: (t) => t.Av,
+    dominant: "Rg",
+    // 3-op-amp in-amp (ideal VCVS op-amps). Drive the + input, hold − at ground;
+    // measured |Vout/Vin| = total differential gain 1 + 2R/Rg.
+    build: (v) =>
+      `* instrumentation amp (3 op-amp, ideal)\nV1 in 0 AC 1\nRg o1a o2a ${num(v.Rg)}\nRa o1a o1 ${num(v.R)}\nRb o2a o2 ${num(v.R)}\nE1 o1 0 in o1a 1e6\nE2 o2 0 0 o2a 1e6\nR3 o1 m ${num(v.Rd)}\nR4 m out ${num(v.Rd)}\nR5 o2 p ${num(v.Rd)}\nR6 p 0 ${num(v.Rd)}\nE3 out 0 p m 1e6\n.ac lin 1 1000 1000\n.end`,
+    measure: (r) => measureGain(r, "in", "out"),
+  },
+  current_mirror: {
+    targetName: "I",
+    target: (t) => t.I,
+    dominant: "Rref",
+    // Diode-connected reference + mirror output BJT; measure the mirrored output
+    // current through the in-line sense source in the load branch.
+    build: (v, t) =>
+      `* bjt current mirror\nVCC vcc 0 DC ${num(t.VCC || 12)}\nRref vcc cref ${num(v.Rref)}\nQ1 cref cref 0 QN\nQ2 cout cref 0 QN\nVsense vcc load DC 0\nRload load cout 1k\n.model QN NPN(Bf=200 Is=1e-14)\n.op\n.end`,
+    measure: (r) => { const dc = measureDC(r, "i(vsense)"); return dc == null ? null : Math.abs(dc); },
+  },
   rc_oscillator: {
     targetName: "f",
     target: (t) => t.f,
     dominant: "C1",
-    // A Wien-bridge oscillator runs at the frequency where its frequency-setting
-    // network has zero phase shift — the resonant peak of the Wien band-pass,
-    // f0 = 1/(2*pi*R*C). We verify that peak directly with an AC sweep (robust),
-    // rather than relying on a transient oscillation to start and sustain (which
-    // needs amplitude-limiting nonlinearity SPICE will not reliably converge on).
-    build: (v, t) =>
-      `* wien frequency network\nV1 in 0 AC 1\nR1 in a ${num(v.R1)}\nC1 a out ${num(v.C1)}\nRp out 0 ${num(v.R1)}\nCp out 0 ${num(v.C1)}\n.ac dec 200 ${num(t.f / 100)} ${num(t.f * 100)}\n.end`,
-    measure: (r) => measurePeakFreq(r, "out"),
+    // Honest time-domain verification (B1): a Wien-bridge oscillator that really
+    // starts and sustains, then its *measured* oscillation frequency is read from
+    // the transient by FFT (parabolic-interpolated) with a zero-cross cross-check
+    // — no longer an AC-peak proxy. Loop gain is set just above 3 (Rf/Rg = 2.1) and
+    // two anti-parallel diodes across Rf limit the amplitude so the oscillation is
+    // bounded and SPICE converges; a small .ic kicks it into startup. The measured
+    // frequency sits a touch below the ideal 1/(2*pi*R*C) (real finite-gain /
+    // nonlinearity offset ~0.5 %), which is exactly the honesty this unlocks.
+    // The feedback pair (Rf, R2) is the DESIGNED one, so what is verified is what
+    // the BOM ships — gain = 1+Rf/R2 sits just above 3 and the diodes hold the
+    // amplitude bounded (a gain of exactly 3 decays and never sustains).
+    build: (v, t) => {
+      const period = 1 / (t.f || 1000);
+      const step = num(period / 40);     // ~40 points/cycle
+      const stop = num(period * 80);     // ~80 cycles — plenty to settle + resolve
+      return `* wien-bridge oscillator (transient)\nR1 out n1 ${num(v.R1)}\nC1 n1 vp ${num(v.C1)}\nR2w vp 0 ${num(v.R1)}\nC2 vp 0 ${num(v.C1)}\nEop out 0 vp vn 100000\nRf out vn ${num(v.Rf)}\nRg vn 0 ${num(v.R2)}\nD1 out vn DL\nD2 vn out DL\n.model DL D(Is=1e-14 N=1.8)\n.ic V(n1)=0.1\n.tran ${step} ${stop} uic\n.end`;
+    },
+    measure: (r) => measureFrequency(r, "out"),
   },
 };
 

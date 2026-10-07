@@ -46,6 +46,9 @@ export const SUPPORTED_TYPES = [
   { id: 'rc_differentiator', name: 'Op-Amp Differentiator', fields: ['fc'] },
   { id: 'fourth_order_lowpass', name: '4th-Order Butterworth Low-Pass', fields: ['fc'] },
   { id: 'current_source', name: 'Constant Current Source', fields: ['I'] },
+  { id: 'mfb_lowpass', name: 'Multiple-Feedback Low-Pass (2nd order)', fields: ['fc'] },
+  { id: 'instrumentation_amp', name: 'Instrumentation Amplifier (3 op-amp)', fields: ['Av'] },
+  { id: 'current_mirror', name: 'BJT Current Mirror', fields: ['I'] },
 ];
 
 /** Default constraint values applied when a partial spec omits them. */

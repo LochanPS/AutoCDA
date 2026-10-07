@@ -15,7 +15,7 @@ the numbers, see `RESEARCH.txt`. For the visual system, see `DESIGN.md`.
 
 ---
 
-## 1. Supported circuits (10 types)
+## 1. Supported circuits (22 types; representative set below)
 
 | Type | Name | Design target(s) | SPICE-verified |
 |---|---|---|---|
@@ -27,12 +27,19 @@ the numbers, see `RESEARCH.txt`. For the visual system, see `DESIGN.md`.
 | `band_pass` | Band-Pass Filter | `fL`, `fH` (Hz) | yes |
 | `opamp_inverting` | Inverting Op-Amp | `Av` | yes |
 | `opamp_noninverting` | Non-Inverting Op-Amp | `Av` | yes |
-| `zener_regulator` | Zener Voltage Regulator | `Vin`, `Vz` (V) | analytical only\* |
-| `rc_oscillator` | RC Oscillator | `f` (Hz) | analytical only\* |
+| `mfb_lowpass` | Multiple-Feedback Low-Pass (2nd order) | `fc` (Hz) | yes |
+| `instrumentation_amp` | Instrumentation Amplifier (3 op-amp) | `Av` | yes |
+| `current_mirror` | BJT Current Mirror | `I` (A) | yes |
+| `zener_regulator` | Zener Voltage Regulator | `Vin`, `Vz` (V) | yes (transient) |
+| `rc_oscillator` | RC Oscillator | `f` (Hz) | yes (transient + FFT) |
 
-\* Oscillation and shunt-regulation need a transient + zero-cross/FFT
-measurement not built in this version; these return the honest analytical design
-without a SPICE-measured error, and say so.
+Every supported type is now SPICE-verified against a genuine measurement. The
+last two — the oscillator and the shunt regulator — are verified in the **time
+domain** (`src/sim/transient.js`): the Wien-bridge oscillator really starts and
+sustains, and its frequency is read from the transient by **FFT** (parabolic-
+interpolated) with a **zero-crossing** cross-check; the zener/shunt regulator
+settles under load and its output (plus line/load regulation) is measured off the
+same waveform. No type returns an un-measured analytical result any more.
 
 ---
 
@@ -180,8 +187,6 @@ AI-in-the-loop refinement mode* — not "an AI that designs circuits."
 
 ## 6. Known limits & roadmap
 
-- `zener_regulator` and `rc_oscillator` are analytical-only in this build
-  (need transient/FFT measurement).
 - Reliable **sub-1% tolerance** needs series/parallel resistor combinations; today
   a single standard part sets the ~1% floor (the loop returns the best part and
   reports the honest error).

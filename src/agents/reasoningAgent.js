@@ -67,6 +67,9 @@ const MONO = {
   rc_differentiator: -1,
   fourth_order_lowpass: -1,
   current_source: -1,
+  mfb_lowpass: -1,        // fc = 1/√(R2·R3·C1·C2), dom R2 → fc falls as R2↑
+  instrumentation_amp: -1, // Av = 1 + 2R/Rg, dom Rg → Av falls as Rg↑
+  current_mirror: -1,      // Iout = (VCC−Vbe)/Rref, dom Rref → Iout falls as Rref↑
 };
 
 /**
@@ -94,6 +97,8 @@ export const JOINT_PAIR = {
   opamp_inverting: ["Rf", "R1"],
   opamp_noninverting: ["Rf", "R1"],
   common_emitter: ["RC", "RE"],
+  mfb_lowpass: ["R2", "R3"],
+  instrumentation_amp: ["Rg", "R"],
 };
 
 // Finest realistic buyable series per component kind: resistors come in E96 (1%);

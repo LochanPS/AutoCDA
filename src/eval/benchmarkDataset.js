@@ -210,6 +210,17 @@ const CURATED = [
   { id: "cs2", prompt: "current source 5mA", type: "current_source", targets: { I: 0.005 }, difficulty: "medium", style: "canonical" },
   { id: "cs3", prompt: "20mA current sink", type: "current_source", targets: { I: 0.02 }, difficulty: "hard", style: "colloquial" },
 
+  // ── A1 additions: mfb_lowpass, instrumentation_amp, current_mirror ──────────
+  { id: "mfb1", prompt: "multiple feedback low pass 3kHz", type: "mfb_lowpass", targets: { fc: 3000 }, difficulty: "medium", style: "canonical" },
+  { id: "mfb2", prompt: "mfb low pass filter at 1 kHz", type: "mfb_lowpass", targets: { fc: 1000 }, difficulty: "medium", style: "canonical" },
+  { id: "mfb3", prompt: "infinite gain multiple-feedback filter 2kHz", type: "mfb_lowpass", targets: { fc: 2000 }, difficulty: "hard", style: "canonical" },
+  { id: "ia1", prompt: "instrumentation amplifier gain 50", type: "instrumentation_amp", targets: { Av: 50 }, difficulty: "easy", style: "canonical" },
+  { id: "ia2", prompt: "in-amp gain of 100", type: "instrumentation_amp", targets: { Av: 100 }, difficulty: "medium", style: "canonical" },
+  { id: "ia3", prompt: "3 op-amp instrumentation amp gain 10", type: "instrumentation_amp", targets: { Av: 10 }, difficulty: "medium", style: "canonical" },
+  { id: "cm1", prompt: "current mirror 5mA", type: "current_mirror", targets: { I: 0.005 }, difficulty: "easy", style: "canonical" },
+  { id: "cm2", prompt: "bjt current mirror mirroring 2mA", type: "current_mirror", targets: { I: 0.002 }, difficulty: "medium", style: "canonical" },
+  { id: "cm3", prompt: "mirror 10 mA reference current", type: "current_mirror", targets: { I: 0.01 }, difficulty: "hard", style: "colloquial" },
+
   // A few genuinely ambiguous cases: capable LLM makes a reasonable call but may
   // not match the label. `llm` gives the structured output a strong LLM returns.
   { id: "amb1", prompt: "amplifier gain 50", type: "common_emitter", targets: { Av: 50 }, difficulty: "hard", style: "ambiguous", llm: { type: "opamp_noninverting", targets: { Av: 50 }, confidence: 0.55 } },

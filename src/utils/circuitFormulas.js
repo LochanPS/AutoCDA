@@ -409,7 +409,7 @@ function rcOscillator({ f = 1000, R = 10000 }) {
     components: [
       { ref: 'R1', rawValue: R, unit: 'Ω', display: formatResistance(R), description: 'Wien Resistor (×2)', editable: true },
       { ref: 'C1', rawValue: C, unit: 'F', display: formatCapacitance(C), description: 'Wien Capacitor (×2)', editable: true },
-      { ref: 'Rf', rawValue: 20000, unit: 'Ω', display: formatResistance(20000), description: 'Feedback Resistor', editable: true },
+      { ref: 'Rf', rawValue: 22000, unit: 'Ω', display: formatResistance(22000), description: 'Feedback Resistor', editable: true },
       { ref: 'R2', rawValue: 10000, unit: 'Ω', display: formatResistance(10000), description: 'Gain Resistor', editable: true },
     ],
     derivedParams: { f: fActual },
@@ -426,12 +426,12 @@ function rcOscillator({ f = 1000, R = 10000 }) {
       '[✓] Formula: f = 1 / (2πRC)',
       `[✓] R selected: ${formatResistance(R)}`,
       `[✓] C calculated: ${formatCapacitance(C)}`,
-      '[✓] Gain condition: Rf/R2 = 2 (Av = 3)',
-      '[✓] Oscillation condition checked (Barkhausen)',
+      '[✓] Gain condition: Av = 1 + Rf/R2 = 3.2 (slight excess over 3)',
+      '[✓] Oscillation condition checked (Barkhausen: loop gain ≥ 1)',
       ...analyticalSteps(`f = ${formatFrequency(fActual)}`),
     ],
-    explanation: `Wien Bridge Oscillator generates ${formatFrequency(fActual)} sine wave using f = 1/(2πRC). R = ${formatResistance(R)}, C = ${formatCapacitance(C)}. Op-amp gain = 3 (Rf = 2×R2) satisfies Barkhausen criterion for sustained oscillation. Output is clean sine wave.`,
-    netlist: `Wien Bridge Oscillator — SPICE Netlist\n*AutoCDA Generated\nVcc vcc 0 DC 15\nVee vee 0 DC -15\nR1 out p ${formatResistance(R)}\nC1 p inv ${formatCapacitance(C)}\nR2 p 0 ${formatResistance(R)}\nC2 inv 0 ${formatCapacitance(C)}\nRf out inv 20k\nRg inv 0 10k\nXU1 p inv vcc vee out LM741\n.TRAN 0.01m 10m\n.PROBE V(out)\n.END`,
+    explanation: `Wien Bridge Oscillator generates ${formatFrequency(fActual)} sine wave using f = 1/(2πRC). R = ${formatResistance(R)}, C = ${formatCapacitance(C)}. Op-amp gain = 1 + Rf/R2 = 3.2 — a small excess over the ideal 3 so oscillation starts reliably, with diode amplitude-limiting holding it bounded (a gain of exactly 3 decays and never sustains). Satisfies the Barkhausen criterion.`,
+    netlist: `Wien Bridge Oscillator — SPICE Netlist\n*AutoCDA Generated\nVcc vcc 0 DC 15\nVee vee 0 DC -15\nR1 out p ${formatResistance(R)}\nC1 p inv ${formatCapacitance(C)}\nR2 p 0 ${formatResistance(R)}\nC2 inv 0 ${formatCapacitance(C)}\nRf out inv 22k\nRg inv 0 10k\nXU1 p inv vcc vee out LM741\n.TRAN 0.01m 10m\n.PROBE V(out)\n.END`,
   };
 }
 
@@ -721,6 +721,125 @@ function currentSource({ I = 0.01 }) {
   };
 }
 
+// ── A1: additional building blocks ─────────────────────────────────────────────
+
+function mfbLowpass({ fc = 1000, K = 1 }) {
+  // Multiple-feedback (infinite-gain) 2nd-order low-pass, single inverting op-amp.
+  // DC gain = −R2/R1; ω0 = 1/√(R2·R3·C1·C2). Equal-R, equal-C seed (R1=R2=R3=R,
+  // C1=C2=C) gives gain ≈ −1 and ω0 = 1/(R·C); SPICE measures the true −3 dB and
+  // the loop trims R2/R3 to the target. A real active filter — no closed-form
+  // single-component answer, so it is finished by SPICE-graded refinement.
+  const C = 10e-9;
+  const R = 1 / (2 * Math.PI * fc * C);
+  const R1 = R / K; // set DC gain magnitude K = R2/R1
+  const fcActual = fc;
+  return {
+    id: 'mfb_lowpass',
+    name: 'Multiple-Feedback Low-Pass (2nd order)',
+    schematic: '/schematics/mfb_lowpass.svg',
+    simulationBadge: analyticalBadge(`fc = ${formatFrequency(fcActual)}, gain = −${+K.toPrecision(3)}`),
+    components: [
+      { ref: 'R1', rawValue: R1, unit: 'Ω', display: formatResistance(R1), description: 'Input Resistor',       editable: true },
+      { ref: 'R2', rawValue: R,  unit: 'Ω', display: formatResistance(R),  description: 'Feedback Resistor',    editable: true },
+      { ref: 'R3', rawValue: R,  unit: 'Ω', display: formatResistance(R),  description: 'Summing-Node Resistor', editable: true },
+      { ref: 'C1', rawValue: C,  unit: 'F', display: formatCapacitance(C), description: 'Feedback Capacitor',   editable: true },
+      { ref: 'C2', rawValue: C,  unit: 'F', display: formatCapacitance(C), description: 'Shunt Capacitor',      editable: true },
+    ],
+    derivedParams: { fc: fcActual, K, order: 2 },
+    graph: { type: 'bode', title: `Frequency Response — MFB Low-Pass (fc = ${formatFrequency(fcActual)}, 2nd order)`, xLabel: 'Frequency (Hz)', yLabel: 'Gain (dB)', cutoffFrequency: fcActual, filterType: 'lowpass' },
+    processingSteps: [
+      '[✓] Input received: Multiple-Feedback Low-Pass Filter',
+      `[✓] Target cutoff: ${formatFrequency(fc)}`,
+      '[✓] Topology: 2nd-order inverting multiple-feedback (single op-amp)',
+      '[✓] Formula: ω0 = 1/√(R2·R3·C1·C2), DC gain = −R2/R1',
+      `[✓] C1 = C2 = ${formatCapacitance(C)}, R2 = R3 = ${formatResistance(R)}`,
+      `[✓] R1 = ${formatResistance(R1)} (gain −${+K.toPrecision(3)})`,
+      ...analyticalSteps(`fc = ${formatFrequency(fcActual)} (−40 dB/decade)`),
+    ],
+    explanation: `Second-order multiple-feedback (infinite-gain) low-pass using a single inverting op-amp. ω0 = 1/√(R2·R3·C1·C2) and DC gain = −R2/R1. With R2 = R3 = ${formatResistance(R)}, C1 = C2 = ${formatCapacitance(C)} and R1 = ${formatResistance(R1)} the cutoff is ${formatFrequency(fcActual)} with a −40 dB/decade roll-off and a gain of −${+K.toPrecision(3)}. Five coupled components set fc jointly — no single-component closed form — so SPICE-graded refinement finishes it.`,
+    netlist: `Multiple-Feedback Low-Pass — SPICE Netlist\n*AutoCDA Generated\nV1 in 0 AC 1\nR1 in a ${formatResistance(R1)}\nR2 a out ${formatResistance(R)}\nR3 a m ${formatResistance(R)}\nC1 a out ${formatCapacitance(C)}\nC2 m 0 ${formatCapacitance(C)}\nE1 out 0 0 m 1e6\n.ac dec 100 ${(fcActual/100).toPrecision(4)} ${(fcActual*100).toPrecision(4)}\n.end`,
+  };
+}
+
+function instrumentationAmp({ Av = 10 }) {
+  // Classic 3-op-amp instrumentation amplifier. Stage-1 differential gain is
+  // 1 + 2R/Rg; stage 2 is a unity-gain difference amp. Total gain = 1 + 2R/Rg.
+  // Rg is the single gain-setting resistor; R (two equal feedback R's) and the
+  // difference-amp resistors Rd are fixed. SPICE measures the end-to-end gain.
+  const R = 10000;
+  const Rd = 10000;
+  const Rg = (2 * R) / Math.max(Av - 1, 1e-6);
+  const AvActual = 1 + (2 * R) / Rg;
+  return {
+    id: 'instrumentation_amp',
+    name: 'Instrumentation Amplifier (3 op-amp)',
+    schematic: '/schematics/instrumentation_amp.svg',
+    simulationBadge: analyticalBadge(`Gain = ${+AvActual.toPrecision(3)}`),
+    components: [
+      { ref: 'Rg', rawValue: Rg, unit: 'Ω', display: formatResistance(Rg), description: 'Gain-Set Resistor',   editable: true },
+      { ref: 'R',  rawValue: R,  unit: 'Ω', display: formatResistance(R),  description: 'Stage-1 Feedback (×2)', editable: true },
+      { ref: 'Rd', rawValue: Rd, unit: 'Ω', display: formatResistance(Rd), description: 'Difference-Amp Resistors (×4)', editable: true },
+    ],
+    derivedParams: { Av: AvActual },
+    graph: {
+      type: 'waveform', title: `Instrumentation Amp — Gain = ${+AvActual.toPrecision(3)}`,
+      xLabel: 'Time (ms)', yLabel: 'Voltage (V)',
+      input:  { amplitude: 0.1, label: 'Vin(diff)', color: '#58a6ff' },
+      output: { amplitude: +(0.1 * AvActual).toPrecision(3), label: `Vout (${+AvActual.toPrecision(3)}×)`, color: '#3fb950' },
+      frequency: 1000, phaseInvert: false,
+    },
+    processingSteps: [
+      '[✓] Input received: Instrumentation Amplifier',
+      `[✓] Target gain: ${+Av.toPrecision(3)}`,
+      '[✓] Topology: 3-op-amp (two buffers + unity difference amp)',
+      '[✓] Formula: Av = 1 + 2R/Rg',
+      `[✓] R = ${formatResistance(R)} (×2), Rd = ${formatResistance(Rd)} (×4)`,
+      `[✓] Rg calculated: ${formatResistance(Rg)}`,
+      ...analyticalSteps(`gain = ${+AvActual.toPrecision(3)}`),
+    ],
+    explanation: `Three-op-amp instrumentation amplifier. The two input buffers with the shared gain resistor Rg give a differential gain of 1 + 2R/Rg; the output difference amp (matched Rd) subtracts and buffers. With R = ${formatResistance(R)} and Rg = ${formatResistance(Rg)} the total gain is ${+AvActual.toPrecision(3)}. High input impedance and strong common-mode rejection — the standard front end for sensor/bridge signals. SPICE measures the end-to-end gain and the loop trims Rg.`,
+    netlist: `Instrumentation Amplifier — SPICE Netlist\n*AutoCDA Generated (ideal op-amps)\nV1 in 0 AC 1\nRg o1a o2a ${formatResistance(Rg)}\nRa o1a o1 ${formatResistance(R)}\nRb o2a o2 ${formatResistance(R)}\nE1 o1 0 in o1a 1e6\nE2 o2 0 0 o2a 1e6\nR3 o1 m ${formatResistance(Rd)}\nR4 m out ${formatResistance(Rd)}\nR5 o2 p ${formatResistance(Rd)}\nR6 p 0 ${formatResistance(Rd)}\nE3 out 0 p m 1e6\n.ac lin 1 1000 1000\n.end`,
+  };
+}
+
+function currentMirror({ I = 0.01, VCC = 12 }) {
+  // BJT current mirror. A reference current Iref = (VCC − Vbe)/Rref is set by the
+  // diode-connected Q1 and mirrored by Q2 into the load: Iout ≈ Iref. Rref is the
+  // single set resistor; SPICE measures the delivered output current.
+  const Vbe = 0.7;
+  const Rref = (VCC - Vbe) / I;
+  const IActual = (VCC - Vbe) / Rref;
+  return {
+    id: 'current_mirror',
+    name: 'BJT Current Mirror',
+    schematic: '/schematics/current_mirror.svg',
+    simulationBadge: analyticalBadge(`Iout = ${formatCurrent(IActual)}`),
+    components: [
+      { ref: 'Rref', rawValue: Rref, unit: 'Ω', display: formatResistance(Rref), description: 'Reference Set Resistor', editable: true },
+      { ref: 'Q1',   rawValue: null, unit: null, display: 'NPN BJT', description: 'Diode-Connected Reference', editable: false },
+      { ref: 'Q2',   rawValue: null, unit: null, display: 'NPN BJT', description: 'Mirror Output',            editable: false },
+    ],
+    derivedParams: { I: IActual, VCC },
+    graph: {
+      type: 'bar', title: 'Current Mirror — Reference vs Mirrored Output',
+      data: [
+        { label: `Iref`, value: +(IActual * 1000).toFixed(3), color: '#58a6ff', unit: 'mA' },
+        { label: `Iout (${formatCurrent(IActual)})`, value: +(IActual * 1000).toFixed(3), color: '#3fb950', unit: 'mA' },
+      ],
+    },
+    processingSteps: [
+      '[✓] Input received: BJT Current Mirror',
+      `[✓] Target output current: ${formatCurrent(I)}`,
+      '[✓] Topology: diode-connected reference + mirror transistor',
+      '[✓] Formula: Iref = (VCC − Vbe) / Rref, Iout ≈ Iref',
+      `[✓] Rref calculated: ${formatResistance(Rref)}`,
+      ...analyticalSteps(`Iout = ${formatCurrent(IActual)}`),
+    ],
+    explanation: `A BJT current mirror. The diode-connected transistor Q1 sets a reference current Iref = (VCC − Vbe)/Rref = ${formatCurrent(IActual)} through Rref = ${formatResistance(Rref)}; matched transistor Q2 mirrors it into the load. Output current tracks the reference largely independent of the load voltage (within compliance). SPICE measures the delivered current and the loop trims Rref.`,
+    netlist: `BJT Current Mirror — SPICE Netlist\n*AutoCDA Generated\nVCC vcc 0 DC ${VCC}\nRref vcc cref ${formatResistance(Rref)}\nQ1 cref cref 0 QN\nQ2 cout cref 0 QN\nVsense vcc load DC 0\nRload load cout 1k\n.model QN NPN(Bf=200 Is=1e-14)\n.op\n.end`,
+  };
+}
+
 // ── main export ──────────────────────────────────────────────────────────────
 
 export function calculateCircuit(circuitId, params) {
@@ -745,6 +864,9 @@ export function calculateCircuit(circuitId, params) {
     case 'rc_differentiator':   return rcDifferentiator(params);
     case 'fourth_order_lowpass': return fourthOrderLowpass(params);
     case 'current_source':      return currentSource(params);
+    case 'mfb_lowpass':         return mfbLowpass(params);
+    case 'instrumentation_amp': return instrumentationAmp(params);
+    case 'current_mirror':      return currentMirror(params);
     default: return null;
   }
 }
