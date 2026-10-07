@@ -98,6 +98,10 @@ input, select { font-family: inherit; transition: border-color 160ms var(--ease)
    so a tall schematic makes the column scroll rather than squeezing the summary. */
 .result-view { flex: 0 0 auto !important; min-height: 0; padding-bottom: 8px; }
 .tab-pane { flex: 0 0 auto !important; height: clamp(360px, 56vh, 580px); }
+/* Details is a long stack (components, BOM, Monte-Carlo, trace, how-it-works).
+   Let it size to its content and scroll with the page instead of being trapped
+   in a short fixed-height nested-scroll box that clips the lower panels. */
+.tab-pane--auto { height: auto !important; }
 
 /* Mobile-first shell: stack the desktop two-column layout on narrow screens.
    The landing/results column (main) comes first; the describe sidebar below. */

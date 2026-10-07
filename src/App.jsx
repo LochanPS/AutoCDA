@@ -23,6 +23,11 @@ import { runSpice } from "./sim/spice";
 import { parseWithLLM } from "./parse/llmParser";
 import { buildBOM, buildBOMPriced, buildBomCsv } from "./design/bom";
 import { cached, makeMarketplaceSource } from "./design/distributorPricing";
+import { summarizeSourcing, landedCostINR, envLandedOpts, formatINR } from "./design/sourcing";
+
+// India landed-cost is shown unless explicitly turned off (REACT_APP_INR_LANDED="0").
+const SHOW_INR_LANDED = String(process.env.REACT_APP_INR_LANDED ?? "1") !== "0";
+const LANDED_OPTS = envLandedOpts();
 
 // Multi-distributor marketplace source (built once) when a proxy URL is set; else
 // null -> static catalog. The URL is non-secret; distributor keys live in the proxy.
@@ -487,9 +492,16 @@ export default function App() {
     });
   }, [selectedCircuit]);
 
+  // Back to the landing screen: clear the current design and reset to design mode.
+  const handleHome = useCallback(() => {
+    setSelectedCircuit(null);
+    setActiveTab("schematic");
+    setMode("design");
+  }, []);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg-primary)", overflow: "hidden" }}>
-      <Header verification={mode === "design" ? selectedCircuit?.verification : null} mode={mode} onMode={setMode} />
+      <Header verification={mode === "design" ? selectedCircuit?.verification : null} mode={mode} onMode={setMode} onHome={handleHome} />
 
       {mode === "import" ? (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "auto", padding: "16px" }}>
@@ -612,7 +624,7 @@ export default function App() {
                 disabled={loading}
               />
               <Tabs active={activeTab} onChange={setActiveTab} />
-              <div className="tab-pane" style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+              <div className={"tab-pane" + (activeTab === "details" ? " tab-pane--auto" : "")} style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
                 {activeTab === "schematic" && (
                   <SchematicPanel circuit={selectedCircuit} visible />
                 )}
@@ -623,7 +635,7 @@ export default function App() {
                   <CircuitJSPanel circuit={selectedCircuit} visible />
                 )}
                 {activeTab === "details" && (
-                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px", paddingRight: "4px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                     <ComponentTable
                       circuit={selectedCircuit}
                       visible
@@ -743,16 +755,22 @@ function ModeTabs({ mode, onMode }) {
   );
 }
 
-function Header({ verification, mode, onMode }) {
+function Header({ verification, mode, onMode, onHome }) {
   return (
     <header className="app-header" style={{ height: "64px", background: "var(--surface)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", flexShrink: 0, gap: "16px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+      <button
+        type="button"
+        onClick={onHome}
+        title="Go to home"
+        aria-label="AutoCDA home"
+        style={{ display: "flex", alignItems: "center", gap: "12px", background: "none", border: "none", padding: 0, cursor: onHome ? "pointer" : "default", textAlign: "left" }}
+      >
         <Mark />
         <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
           <span style={{ fontWeight: 700, fontSize: "var(--fs-h2)", color: "var(--text)", letterSpacing: "-0.01em" }}>AutoCDA</span>
           <span style={{ color: "var(--text-3)", fontSize: "var(--fs-xs)" }}>Analog circuit design</span>
         </div>
-      </div>
+      </button>
       {onMode && <ModeTabs mode={mode} onMode={onMode} />}
       <ProButton />{/* status shown under the result title, not duplicated here */}
     </header>
@@ -1546,6 +1564,14 @@ function BomPanel({ circuit }) {
   const nSites = sites.size;
   const offerStr = (r) => (r.offers || []).map((o) => `${o.source} $${Number(o.unitPrice).toFixed(3)}`).join("  ·  ");
 
+  // Whole-BOM sourcing: mix-and-match cheapest vs the cheapest single seller.
+  const summary = anyPriced ? summarizeSourcing(bom) : null;
+  // India landed cost (duty + GST + shipping + forex) on the cheapest basket.
+  const landed = SHOW_INR_LANDED ? landedCostINR(bom.total, LANDED_OPTS) : null;
+  const landedTitle = landed
+    ? `Parts ${formatINR(landed.parts - landed.duty - landed.gst)} + duty ${formatINR(landed.duty)} + GST ${formatINR(landed.gst)} + shipping ${formatINR(landed.shipping)} · @ ₹${landed.rate.usdToInr}/$`
+    : "";
+
   const th = { textAlign: "left", padding: "8px 18px", fontSize: "var(--fs-xs)", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, borderBottom: "1px solid var(--border)" };
   const thR = { ...th, textAlign: "right" };
   const td = { padding: "9px 18px", fontSize: "var(--fs-sm)", borderBottom: "1px solid var(--border)" };
@@ -1671,6 +1697,27 @@ function BomPanel({ circuit }) {
             </tr>
           </tbody>
         </table>
+        {(landed || (summary && (summary.savings > 0 || summary.sellers.length > 1))) && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "10px 18px", borderTop: "1px solid var(--border)", background: "var(--surface-2)", flexWrap: "wrap" }}>
+            {summary && summary.sellers.length > 0 ? (
+              <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>
+                Cheapest mix across {summary.sellers.length} seller{summary.sellers.length > 1 ? "s" : ""}:{" "}
+                <span style={{ color: "var(--text-2)", fontWeight: 600 }}>${summary.mixedTotal.toFixed(3)}/unit</span>
+                {summary.bestSingle && summary.savings > 0 ? (
+                  <> — saves <span style={{ color: "var(--success)", fontWeight: 600 }}>${summary.savings.toFixed(3)}</span> vs cheapest single seller ({distLabel(summary.bestSingle.source)} ${summary.bestSingle.total.toFixed(3)})</>
+                ) : summary.bestSingle ? (
+                  <> — {distLabel(summary.bestSingle.source)} stocks every part (${summary.bestSingle.total.toFixed(3)})</>
+                ) : null}
+              </span>
+            ) : <span />}
+            {landed ? (
+              <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-2)" }} title={landedTitle}>
+                ≈ <span style={{ fontWeight: 700, color: "var(--text)" }}>{formatINR(landed.total)}</span>{" "}
+                <span style={{ color: "var(--text-3)" }}>delivered to India (est.)</span>
+              </span>
+            ) : null}
+          </div>
+        )}
        </>
       )}
     </div>
