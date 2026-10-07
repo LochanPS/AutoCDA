@@ -45,6 +45,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { SUPPORTED_TYPES, listTypes, runParse, runVerify, runCompose } from "./apiCore.mjs";
 import { PLAYGROUND_HTML, OPENAPI } from "./playground.mjs";
+import { spiceCacheStats } from "../src/sim/spice.js";
 
 const PORT = process.env.PORT || process.env.VERIFY_API_PORT || 3002;
 
@@ -195,7 +196,7 @@ const server = http.createServer(async (req, res) => {
 
   // Health: unauthenticated + unthrottled so host probes always succeed.
   if (req.method === "GET" && url.pathname === "/api/health")
-    return send(200, { ok: true, service: "autocda-verify-api", types: SUPPORTED_TYPES.length });
+    return send(200, { ok: true, service: "autocda-verify-api", types: SUPPORTED_TYPES.length, cache: spiceCacheStats() });
 
   // D4: the running instance is its own documentation — a zero-build playground
   // at / and /playground, and a machine-readable OpenAPI spec for agents/tooling.

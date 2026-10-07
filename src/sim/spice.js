@@ -29,12 +29,45 @@
  */
 
 import { measureCutoff, measureGain, measureDC } from "./measure";
+import { createSpiceCache } from "./spiceCache";
 
 // Re-export the pure analyzers so existing `import ... from "../sim/spice"` works.
 export { measureCutoff, measureGain, measureDC } from "./measure";
 
 let _sim = null;
 let _startPromise = null;
+
+// Content-addressed result cache (keyed by the canonical netlist). ngspice is
+// deterministic, so a repeated deck is returned from here instead of re-run — a
+// large win inside the refine loop and across identical API requests. Disable with
+// AUTOCDA_SPICE_CACHE=off; size via SPICE_CACHE_MAX.
+const _cacheOn =
+  (typeof process === "undefined" ? undefined : process.env.AUTOCDA_SPICE_CACHE) !== "off";
+const _spiceCache = _cacheOn
+  ? createSpiceCache({ max: Number((typeof process !== "undefined" && process.env.SPICE_CACHE_MAX) || 1000) })
+  : null;
+
+// Deep-copy a cached result so a caller mutating it can't corrupt the cache.
+function cloneResult(r) {
+  try {
+    return structuredClone(r);
+  } catch {
+    try {
+      return JSON.parse(JSON.stringify(r));
+    } catch {
+      return r; // last resort: the measure analyzers are read-only
+    }
+  }
+}
+
+/** Cache hit/miss stats (or {disabled:true}). */
+export function spiceCacheStats() {
+  return _spiceCache ? _spiceCache.stats() : { disabled: true };
+}
+/** Clear the result cache (tests / long-running processes). */
+export function clearSpiceCache() {
+  if (_spiceCache) _spiceCache.clear();
+}
 
 /** Load and start the ngspice-wasm engine once; subsequent calls reuse it. */
 export async function initSpice() {
@@ -61,8 +94,12 @@ export async function initSpice() {
   return _startPromise;
 }
 
-/** Run a netlist through ngspice and return a parsed result. */
+/** Run a netlist through ngspice and return a parsed result (cached by deck). */
 export async function runSpice(netlist) {
+  if (_spiceCache) {
+    const hit = _spiceCache.get(netlist);
+    if (hit) return cloneResult(hit);
+  }
   const sim = await initSpice();
   sim.setNetList(netlist);
   const result = await sim.runSim();
@@ -72,7 +109,11 @@ export async function runSpice(netlist) {
   } catch {
     errors = [];
   }
-  return parseResult(result, errors);
+  const parsed = parseResult(result, errors);
+  // Cache a deterministic outcome (including an errored deck — it errors the same
+  // way every time). Store a private copy so later mutations never reach the cache.
+  if (_spiceCache) _spiceCache.set(netlist, cloneResult(parsed));
+  return parsed;
 }
 
 // ── result parsing ─────────────────────────────────────────────────────────

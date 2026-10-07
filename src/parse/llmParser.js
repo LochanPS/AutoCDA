@@ -1,125 +1,163 @@
 /**
  * llmParser.js — structured-output LLM fallback for the circuit-intent parser.
  *
- * The regex parser (src/utils/circuitParser.js) is the instant, offline fast
- * path. When it is unsure, this module asks Claude to extract the intent using
- * tool-calling with a constrained JSON schema, so the model can only return one
- * of the supported circuit types, never an invented one. The result is mapped
- * through makeSpec() so defaults and validation are applied uniformly.
+ * The regex parser (src/utils/circuitParser.js) is the instant, offline fast path.
+ * When it is unsure, this asks an LLM to extract the intent via tool/function
+ * calling with a constrained schema, so the model can only return a supported type,
+ * never an invented one. The result is mapped through makeSpec() so defaults and
+ * validation are applied uniformly.
  *
- * The API key is read from REACT_APP_ANTHROPIC_KEY. If it is absent, parseWithLLM
- * throws "LLM parser unavailable (no key)" so the caller can fall back to the
- * regex result gracefully. The app is fully functional with no key set.
+ * Two providers, selected by whichever key is present (OpenRouter first):
+ *   - OpenRouter (OpenAI-compatible): OPENROUTER_API_KEY [+ OPENROUTER_MODEL]
+ *   - Anthropic (native):             REACT_APP_ANTHROPIC_KEY [+ ANTHROPIC_MODEL]
+ * With no key, parseWithLLM throws "LLM parser unavailable (no key)" and the caller
+ * falls back to the regex result. The app is fully functional with no key set.
  *
- * SECURITY NOTE: a REACT_APP_* var is embedded in the client bundle, so this
- * calls the Anthropic API directly from the browser (with the direct-browser
- * access header). That is fine for local/demo use; a production deployment
- * should proxy the request through a server so the key is never shipped.
+ * SECURITY: never hard-code a key. In the browser a REACT_APP_* var is embedded in
+ * the bundle (demo only — proxy through a server in production). On the server read
+ * the key from the environment (.env, never committed).
  */
 
 import { makeSpec, SUPPORTED_TYPES } from "../spec/circuitSpec";
 
-const MODEL = "claude-sonnet-5";
-const API_URL = "https://api.anthropic.com/v1/messages";
 const TYPE_ENUM = SUPPORTED_TYPES.map((t) => t.id);
 
 const SYSTEM_PROMPT =
   "You extract analog circuit design intent. Output only the structured fields.";
 
-// One tool with a schema that constrains the type to the 10 supported ids.
-const TOOL = {
-  name: "emit_circuit_spec",
-  description:
-    "Return the analog circuit type and its numeric design targets extracted from the user's request.",
-  input_schema: {
-    type: "object",
-    properties: {
-      type: {
-        type: "string",
-        enum: TYPE_ENUM,
-        description: "The single best-matching supported circuit type.",
-      },
-      targets: {
-        type: "object",
-        description:
-          "Numeric design targets keyed by field (e.g. fc in Hz, Vin/Vout/Vsupply/Vz in V, I in A, Av unitless, fL/fH in Hz). Use base SI units. Omit a field if not stated.",
-      },
-      confidence: {
-        type: "number",
-        description: "0..1 confidence that the type and targets are correct.",
-      },
+// Shared tool schema (the function parameters), provider-agnostic.
+const TOOL_NAME = "emit_circuit_spec";
+const TOOL_DESCRIPTION =
+  "Return the analog circuit type and its numeric design targets extracted from the user's request.";
+const TOOL_PARAMETERS = {
+  type: "object",
+  properties: {
+    type: { type: "string", enum: TYPE_ENUM, description: "The single best-matching supported circuit type." },
+    targets: {
+      type: "object",
+      description:
+        "Numeric design targets keyed by field (fc/fL/fH in Hz, Vin/Vout/Vsupply/Vz in V, I in A, Av unitless). Base SI units. Omit a field if not stated.",
     },
-    required: ["type", "targets", "confidence"],
+    confidence: { type: "number", description: "0..1 confidence that the type and targets are correct." },
   },
+  required: ["type", "targets", "confidence"],
 };
 
+const env = (k) => (typeof process !== "undefined" && process.env ? process.env[k] : undefined);
+
+/** Which provider to use, and its config — OpenRouter preferred when both are set. */
+export function selectProvider() {
+  const or = env("OPENROUTER_API_KEY");
+  if (or) {
+    return {
+      name: "openrouter",
+      key: or,
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      model: env("OPENROUTER_MODEL") || "anthropic/claude-3.5-sonnet",
+    };
+  }
+  const an = env("REACT_APP_ANTHROPIC_KEY");
+  if (an) {
+    return {
+      name: "anthropic",
+      key: an,
+      url: "https://api.anthropic.com/v1/messages",
+      model: env("ANTHROPIC_MODEL") || "claude-sonnet-5",
+    };
+  }
+  return null;
+}
+
+/** Pull the tool-call arguments object out of a provider response. Exported for tests. */
+export function extractToolArgs(provider, data) {
+  if (provider === "openrouter") {
+    const call = data?.choices?.[0]?.message?.tool_calls?.[0];
+    if (!call?.function?.arguments) throw new Error("LLM returned no tool call");
+    try {
+      return typeof call.function.arguments === "string" ? JSON.parse(call.function.arguments) : call.function.arguments;
+    } catch {
+      throw new Error("LLM tool arguments were not valid JSON");
+    }
+  }
+  // anthropic
+  const block = (data.content || []).find((b) => b.type === "tool_use");
+  if (!block || !block.input) throw new Error("LLM returned no structured output");
+  return block.input;
+}
+
 /**
- * Extract a CircuitSpec from arbitrary phrasing via the Anthropic API.
+ * Extract a CircuitSpec from arbitrary phrasing via the configured LLM.
  * @param {string} text
  * @returns {Promise<import('../spec/circuitSpec').CircuitSpec>}
- * @throws if no key is configured, or the request/response fails.
  */
-export async function parseWithLLM(text, { fetchImpl = fetch } = {}) {
-  const key = process.env.REACT_APP_ANTHROPIC_KEY;
-  if (!key) throw new Error("LLM parser unavailable (no key)");
+export async function parseWithLLM(text, { fetchImpl = (typeof fetch !== "undefined" ? fetch : null) } = {}) {
+  const p = selectProvider();
+  if (!p) throw new Error("LLM parser unavailable (no key)");
+  if (!fetchImpl) throw new Error("no fetch implementation");
 
-  const res = await fetchImpl(API_URL, {
-    method: "POST",
-    headers: {
+  let headers, body;
+  if (p.name === "openrouter") {
+    headers = {
       "content-type": "application/json",
-      "x-api-key": key,
+      authorization: `Bearer ${p.key}`,
+      "HTTP-Referer": "https://auto-cda-phi.vercel.app",
+      "X-Title": "AutoCDA",
+    };
+    body = {
+      model: p.model,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: text },
+      ],
+      tools: [{ type: "function", function: { name: TOOL_NAME, description: TOOL_DESCRIPTION, parameters: TOOL_PARAMETERS } }],
+      tool_choice: { type: "function", function: { name: TOOL_NAME } },
+      max_tokens: 400,
+    };
+  } else {
+    headers = {
+      "content-type": "application/json",
+      "x-api-key": p.key,
       "anthropic-version": "2023-06-01",
       "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: MODEL,
+    };
+    body = {
+      model: p.model,
       max_tokens: 400,
       system: SYSTEM_PROMPT,
-      tools: [TOOL],
-      tool_choice: { type: "tool", name: TOOL.name },
+      tools: [{ name: TOOL_NAME, description: TOOL_DESCRIPTION, input_schema: TOOL_PARAMETERS }],
+      tool_choice: { type: "tool", name: TOOL_NAME },
       messages: [{ role: "user", content: text }],
-    }),
-  });
+    };
+  }
 
+  const res = await fetchImpl(p.url, { method: "POST", headers, body: JSON.stringify(body) });
   if (!res.ok) {
     let detail = "";
     try { detail = (await res.text()).slice(0, 200); } catch { /* ignore */ }
     throw new Error(`LLM request failed (${res.status})${detail ? `: ${detail}` : ""}`);
   }
-
   const data = await res.json();
-  const block = (data.content || []).find((b) => b.type === "tool_use");
-  if (!block || !block.input) throw new Error("LLM returned no structured output");
-
-  return mapToSpec(block.input);
+  return mapToSpec(extractToolArgs(p.name, data));
 }
 
 /**
- * Map the model's raw tool output into a validated CircuitSpec. Exported for
- * unit testing without a network call.
+ * Map the model's raw tool output into a validated CircuitSpec. Exported for tests.
  * @param {{type:string, targets?:object, confidence?:number}} raw
  */
 export function mapToSpec(raw) {
   const { type, targets = {}, confidence } = raw || {};
-
   if (!TYPE_ENUM.includes(type)) {
     throw new Error(`LLM returned unsupported type "${type}"`);
   }
-
   const def = SUPPORTED_TYPES.find((t) => t.id === type);
   const cleanTargets = {};
   const assumed = [];
-
   for (const field of def.fields) {
-    const raw = targets[field];
-    const n = raw == null ? NaN : Number(raw);
-    if (Number.isFinite(n)) {
-      cleanTargets[field] = n;
-    } else {
-      assumed.push(`${field} was not specified by the request; please set it`);
-    }
+    const r = targets[field];
+    const nmbr = r == null ? NaN : Number(r);
+    if (Number.isFinite(nmbr)) cleanTargets[field] = nmbr;
+    else assumed.push(`${field} was not specified by the request; please set it`);
   }
-
   return makeSpec({
     type,
     targets: cleanTargets,
