@@ -8,3 +8,6 @@ build/
 .vercel
 scratchpad/
 .claude/settings.local.json
+
+# Pro signing private key — never commit
+.secrets/

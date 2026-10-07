@@ -2,11 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "autocda-build-preview",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["-y", "serve", "-s", "build", "-l", "3005"],
-      "port": 3005,
-      "url": "http://localhost:3005"
+      "name": "autocda-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 3000
     }
   ]
 }
