@@ -18,6 +18,10 @@ import { makeSpec, SUPPORTED_TYPES } from "../src/spec/circuitSpec.js";
 import { parsePrompt } from "../src/utils/circuitParser.js";
 import { buildBOM } from "../src/design/bom.js";
 import { composeCircuit, verifyComposition } from "../src/design/compose.js";
+import { collectMetrics } from "../src/agents/metricsAgent.js";
+import { reproStamp } from "../src/sim/repro.js";
+import { landedCostINR, envLandedOpts } from "../src/design/sourcing.js";
+import { runCorners } from "../src/design/corners.js";
 
 export { SUPPORTED_TYPES };
 
@@ -57,7 +61,41 @@ export async function runVerify(body) {
     ref: c.ref, value: c.display, rawValue: c.rawValue, unit: c.unit, description: c.description,
     ...(c.synthesis ? { synthesis: c.synthesis } : {}),
   }));
-  const bom = buildBOM(res.components || circuit.components || []);
+  const finalParts = res.components || circuit.components || [];
+  const bom = buildBOM(finalParts);
+
+  // ── D3: one call returns the richer verification + sourcing, not just pass/fail ──
+  // valueMap for the extra-metrics pass (ref -> raw SI value).
+  const valueMap = {};
+  for (const c of finalParts) if (c.rawValue != null) valueMap[c.ref] = c.rawValue;
+
+  // Richer measured metrics (Theme B2): THD/amplitude for oscillators, line/load
+  // regulation for regulators, etc. Null for types with none. Never fails verify.
+  let metrics = null;
+  if (res.verifiable) {
+    try { metrics = await collectMetrics({ type: spec.type, targets: spec.targets, valueMap, runSpice }); }
+    catch { metrics = null; }
+  }
+
+  // Reproducibility stamp (Theme B5): engine version + canonical netlist hash, so a
+  // verified result is auditable and re-runnable — cite it, re-derive it.
+  const repro = circuit.netlist ? reproStamp(circuit.netlist) : null;
+
+  // Sourcing (Theme C): the India landed cost no global distributor shows — parts +
+  // customs duty + GST + shipping + forex. Pure/deterministic (no per-call network).
+  const indiaLanded = landedCostINR(bom.total, envLandedOpts());
+  const sourcing = {
+    bomUsd: bom.total,
+    indiaLandedINR: indiaLanded,
+  };
+
+  // Corner & environment analysis (Theme B4) — opt-in (several extra SPICE runs).
+  let corners = null;
+  if (body.corners && res.verifiable) {
+    try { corners = await runCorners(spec, finalParts, { runSpice }); }
+    catch { corners = null; }
+  }
+
   return {
     status: 200,
     payload: {
@@ -78,6 +116,10 @@ export async function runVerify(body) {
       assumed: spec.assumed,
       components,
       bom: { rows: bom.rows, total: bom.total },
+      metrics,
+      sourcing,
+      repro,
+      ...(corners ? { corners } : {}),
       netlist: circuit.netlist || null,
       trace: res.trace || [],
     },
@@ -102,6 +144,8 @@ export async function runCompose(body) {
         errors: v.errors,
         components: comp.components.map((c) => ({ ref: c.ref, value: c.display, unit: c.unit, stage: c.stage })),
         bom: { rows: bom.rows, total: bom.total },
+        sourcing: { bomUsd: bom.total, indiaLandedINR: landedCostINR(bom.total, envLandedOpts()) },
+        repro: comp.netlist ? reproStamp(comp.netlist) : null,
         netlist: comp.netlist,
       },
     };

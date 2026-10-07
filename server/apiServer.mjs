@@ -43,6 +43,7 @@ import http from "node:http";
 import httpsMod from "node:https";
 import fs from "node:fs";
 import { SUPPORTED_TYPES, listTypes, runParse, runVerify, runCompose } from "./apiCore.mjs";
+import { PLAYGROUND_HTML, OPENAPI } from "./playground.mjs";
 
 const PORT = process.env.PORT || process.env.VERIFY_API_PORT || 3002;
 
@@ -164,6 +165,25 @@ const server = http.createServer(async (req, res) => {
   // Health: unauthenticated + unthrottled so host probes always succeed.
   if (req.method === "GET" && url.pathname === "/api/health")
     return send(200, { ok: true, service: "autocda-verify-api", types: SUPPORTED_TYPES.length });
+
+  // D4: the running instance is its own documentation — a zero-build playground
+  // at / and /playground, and a machine-readable OpenAPI spec for agents/tooling.
+  // All unauthenticated + unthrottled (static, no engine work).
+  if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/playground")) {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...cors });
+    return res.end(PLAYGROUND_HTML);
+  }
+  if (req.method === "GET" && url.pathname === "/api/openapi.json")
+    return send(200, OPENAPI);
+  if (req.method === "GET" && url.pathname === "/api")
+    return send(200, {
+      ok: true,
+      service: "autocda-verify-api",
+      playground: "/",
+      openapi: "/api/openapi.json",
+      endpoints: ["/api/health", "/api/types", "/api/usage", "POST /api/parse", "POST /api/verify", "POST /api/compose"],
+      auth: "send x-api-key: <key> or Authorization: Bearer <key>; no key = free anonymous tier",
+    });
 
   // Identify + authenticate caller.
   const caller = callerFrom(req);
