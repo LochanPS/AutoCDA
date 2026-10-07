@@ -67,7 +67,7 @@ const STATIC = {
 const INITIAL_MESSAGES = [
   {
     role: "system",
-    text: "Hi! Describe a circuit in plain English — 19 types including 2nd-order Sallen-Key filters and multi-stage amplifiers. You can set tolerance and E-series in words too (e.g. \"2% tolerance on E96\"). I design it, then verify it in a real SPICE simulator. Open the Details tab after a run to see the reasoning loop, bill of materials, and Monte-Carlo yield. Try an example:",
+    text: "Hi! Describe a circuit in plain English — 19 types including 2nd-order Sallen-Key filters and multi-stage amplifiers. You can set tolerance and E-series in words too (e.g. \"2% tolerance on E96\"). I design it, then verify it in a real SPICE simulator. After a run, the BOM, Yield, Optimize, and Build log tabs show the buyable parts, Monte-Carlo yield, optimization, and the full reasoning trace. Try an example:",
   },
 ];
 
@@ -87,7 +87,15 @@ const TABS = [
   { id: "response", label: "Response" },
   { id: "livesim", label: "Live sim" },
   { id: "details", label: "Details" },
+  { id: "bom", label: "BOM" },
+  { id: "yield", label: "Yield" },
+  { id: "optimize", label: "Optimize" },
+  { id: "buildlog", label: "Build log" },
 ];
+
+// Tabs with long, free-flowing content size to their content and scroll with
+// the page. The canvas tabs (schematic/response/live sim) keep a fixed height.
+const AUTO_TABS = new Set(["details", "bom", "yield", "optimize", "buildlog"]);
 
 // ── verification formatting helpers (Phase 2.3) ──────────────────────────────
 
@@ -624,7 +632,7 @@ export default function App() {
                 disabled={loading}
               />
               <Tabs active={activeTab} onChange={setActiveTab} />
-              <div className={"tab-pane" + (activeTab === "details" ? " tab-pane--auto" : "")} style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+              <div className={"tab-pane" + (AUTO_TABS.has(activeTab) ? " tab-pane--auto" : "")} style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
                 {activeTab === "schematic" && (
                   <SchematicPanel circuit={selectedCircuit} visible />
                 )}
@@ -649,9 +657,25 @@ export default function App() {
                       expanded={expandExplanation}
                       onToggle={() => setExpandExplanation(!expandExplanation)}
                     />
+                  </div>
+                )}
+                {activeTab === "bom" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                     <BomPanel circuit={selectedCircuit} />
+                  </div>
+                )}
+                {activeTab === "yield" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                     <MonteCarloPanel circuit={selectedCircuit} />
+                  </div>
+                )}
+                {activeTab === "optimize" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                     <OptimizePanel circuit={selectedCircuit} onApply={handleApplyOptimized} />
+                  </div>
+                )}
+                {activeTab === "buildlog" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                     <RefineTrace circuit={selectedCircuit} />
                     <HowItWorks steps={logSteps} />
                   </div>
@@ -819,7 +843,7 @@ function ResultSummary({ circuit }) {
             <span className="tnum">{v.trace.length} SPICE eval{v.trace.length === 1 ? "" : "s"}</span>
             {firstPct && bestPct && firstPct !== bestPct && <span className="tnum" style={{ color: "var(--text-3)" }}>· {firstPct}% → {bestPct}%</span>}
             <span style={{ color: "var(--text-3)" }}>· {method}</span>
-            <span style={{ color: "var(--text-3)" }}>· see Details for the full trace</span>
+            <span style={{ color: "var(--text-3)" }}>· see Build log for the full trace</span>
           </div>
         );
       })()}
@@ -849,7 +873,7 @@ function Stat({ label, value, accent }) {
 
 function Tabs({ active, onChange }) {
   return (
-    <div style={{ display: "flex", gap: "3px", background: "var(--surface-2)", padding: "3px", borderRadius: "999px", alignSelf: "flex-start", border: "1px solid var(--border)" }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "3px", background: "var(--surface-2)", padding: "3px", borderRadius: "999px", alignSelf: "flex-start", maxWidth: "100%", border: "1px solid var(--border)" }}>
       {TABS.map(t => {
         const on = t.id === active;
         return (
