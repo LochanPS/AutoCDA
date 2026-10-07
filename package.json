@@ -13,7 +13,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "pricing-proxy": "node server/pricingProxy.js",
-    "verify-api": "node --import ./server/loader.mjs server/apiServer.mjs"
+    "verify-api": "node --import ./server/loader.mjs server/apiServer.mjs",
+    "mcp": "node --import ./server/loader.mjs server/mcpServer.mjs"
   },
   "browserslist": {
     "production": [

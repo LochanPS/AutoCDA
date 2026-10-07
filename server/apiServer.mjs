@@ -21,6 +21,10 @@
  *   ANON_RATE_LIMIT          free anonymous (no/unknown key) limit per window (default 10)
  *   RATE_WINDOW_MS           rate-limit window (default 60000)
  *   USAGE_FILE               optional path to persist per-key usage counts as JSON
+ *                            (only keyed callers are persisted; anon IPs stay in memory)
+ *   KEEP_WARM_URL            optional URL to self-ping to defeat idle spin-down
+ *                            (default: own /api/health once KEEP_WARM_MS is set)
+ *   KEEP_WARM_MS             keep-warm interval in ms (default off; e.g. 840000 = 14 min)
  *
  * Endpoints (JSON, CORS enabled):
  *   GET  /api/health                       -> { ok, types }      (no auth, no rate limit)
@@ -36,13 +40,9 @@
  * No key = free anonymous tier (low limit). Unknown key = 401.
  */
 import http from "node:http";
+import httpsMod from "node:https";
 import fs from "node:fs";
-import { orchestrate } from "../src/agents/orchestrator.js";
-import { runSpice } from "../src/sim/spice.js";
-import { makeSpec, SUPPORTED_TYPES } from "../src/spec/circuitSpec.js";
-import { parsePrompt } from "../src/utils/circuitParser.js";
-import { buildBOM } from "../src/design/bom.js";
-import { composeCircuit, verifyComposition } from "../src/design/compose.js";
+import { SUPPORTED_TYPES, listTypes, runParse, runVerify, runCompose } from "./apiCore.mjs";
 
 const PORT = process.env.PORT || process.env.VERIFY_API_PORT || 3002;
 
@@ -128,7 +128,11 @@ function scheduleFlush() {
   if (!USAGE_FILE || flushTimer) return;
   flushTimer = setTimeout(() => {
     flushTimer = null;
-    try { fs.writeFileSync(USAGE_FILE, JSON.stringify(Object.fromEntries(usage))); } catch { /* ignore */ }
+    // Persist only keyed callers: anon-IP counts are ephemeral and would grow the
+    // file without bound. Keyed usage is the number that must survive restarts.
+    const keyed = {};
+    for (const [k, v] of usage) if (k.startsWith("key:")) keyed[k] = v;
+    try { fs.writeFileSync(USAGE_FILE, JSON.stringify(keyed)); } catch { /* ignore */ }
   }, 5000);
   flushTimer.unref?.();
 }
@@ -146,61 +150,6 @@ const pruneTimer = setInterval(() => {
   for (const [k, b] of buckets) if (now >= b.resetAt) buckets.delete(k);
 }, WINDOW_MS);
 pruneTimer.unref?.();
-
-function specFromRequest(body) {
-  // Accept either a natural-language prompt or an explicit {type, targets}.
-  if (body.prompt) {
-    const p = parsePrompt(body.prompt);
-    if (!p.type || p.confidence === 0) return { error: `could not parse "${body.prompt}"`, parsed: p };
-    return { spec: makeSpec({ type: p.type, targets: p.targets, constraints: p.constraints, confidence: p.confidence, assumed: p.assumed }) };
-  }
-  if (body.type) {
-    try {
-      return { spec: makeSpec({ type: body.type, targets: body.targets || {}, constraints: body.constraints || {} }) };
-    } catch (e) {
-      return { error: String(e.message || e) };
-    }
-  }
-  return { error: "provide { prompt } or { type, targets }" };
-}
-
-async function verify(body) {
-  const sr = specFromRequest(body);
-  if (sr.error) return { status: 422, payload: { ok: false, ...sr } };
-  const spec = sr.spec;
-  const strategy = body.strategy === "grid" ? "grid" : "reasoning";
-  const res = await orchestrate(spec, { runSpice, strategy });
-  const circuit = res.circuit || {};
-  const components = (res.components || circuit.components || []).map((c) => ({
-    ref: c.ref, value: c.display, rawValue: c.rawValue, unit: c.unit, description: c.description,
-    ...(c.synthesis ? { synthesis: c.synthesis } : {}),
-  }));
-  const bom = buildBOM(res.components || circuit.components || []);
-  return {
-    status: 200,
-    payload: {
-      ok: true,
-      type: spec.type,
-      name: circuit.name || spec.type,
-      targets: spec.targets,
-      constraints: spec.constraints,
-      verified: !!res.verifiable,
-      targetName: res.targetName,
-      target: res.targetValue,
-      measured: res.measured,
-      errorPct: res.errorPct,
-      converged: !!res.converged,
-      iterations: res.iterations,
-      eSeries: res.eSeries,
-      tolerance: res.tolerance,
-      assumed: spec.assumed,
-      components,
-      bom: { rows: bom.rows, total: bom.total },
-      netlist: circuit.netlist || null,
-      trace: res.trace || [],
-    },
-  };
-}
 
 const server = http.createServer(async (req, res) => {
   const cors = corsHeaders(req.headers.origin);
@@ -238,29 +187,17 @@ const server = http.createServer(async (req, res) => {
     return send(200, { ok: true, tier: caller.tier, limit: caller.limit, used: usage.get(caller.id) || 0, windowRemaining: rl.remaining }, rlHeaders);
 
   if (req.method === "GET" && url.pathname === "/api/types")
-    return send(200, SUPPORTED_TYPES.map((t) => ({ id: t.id, name: t.name, fields: t.fields })), rlHeaders);
+    return send(200, listTypes(), rlHeaders);
 
   if (req.method === "POST" && url.pathname === "/api/compose") {
     const body = await readBody(req);
     if (body === TOO_LARGE) return send(413, { ok: false, error: `payload exceeds ${MAX_BODY_BYTES} bytes` }, rlHeaders);
-    if (body == null || !Array.isArray(body.stages)) return send(400, { ok: false, error: "provide { stages: [{type, targets}] }" }, rlHeaders);
+    if (body == null) return send(400, { ok: false, error: "invalid JSON" }, rlHeaders);
     try {
-      const comp = composeCircuit(body.stages);
-      const v = await verifyComposition(comp, { runSpice });
-      const bom = buildBOM(comp.components);
-      return send(200, {
-        ok: true,
-        stages: comp.stages,
-        predicted: comp.predicted,
-        measureKind: comp.measureKind,
-        measured: v.measured,
-        errors: v.errors,
-        components: comp.components.map((c) => ({ ref: c.ref, value: c.display, unit: c.unit, stage: c.stage })),
-        bom: { rows: bom.rows, total: bom.total },
-        netlist: comp.netlist,
-      }, rlHeaders);
+      const { status, payload } = await runCompose(body);
+      return send(status, payload, rlHeaders);
     } catch (e) {
-      return send(422, { ok: false, error: String(e.message || e) }, rlHeaders);
+      return send(500, { ok: false, error: String(e.message || e) }, rlHeaders);
     }
   }
 
@@ -271,9 +208,9 @@ const server = http.createServer(async (req, res) => {
     try {
       if (url.pathname === "/api/parse") {
         if (!body.prompt) return send(400, { ok: false, error: "provide { prompt }" }, rlHeaders);
-        return send(200, { ok: true, ...parsePrompt(body.prompt) }, rlHeaders);
+        return send(200, { ok: true, ...runParse(body.prompt) }, rlHeaders);
       }
-      const { status, payload } = await verify(body);
+      const { status, payload } = await runVerify(body);
       return send(status, payload, rlHeaders);
     } catch (e) {
       return send(500, { ok: false, error: String(e.message || e) }, rlHeaders);
@@ -282,10 +219,34 @@ const server = http.createServer(async (req, res) => {
   return send(404, { ok: false, error: "not found", see: "/api/health, /api/usage, /api/types, POST /api/parse, POST /api/verify, POST /api/compose" }, rlHeaders);
 });
 
+// ── D2: keep-warm ──────────────────────────────────────────────────────────────
+// Idle-timeout hosts (Render ~15min, HF Spaces) spin the instance down when no
+// request arrives. A self-ping on an interval shorter than that timeout keeps a
+// running instance alive so real API callers don't eat a cold start. It cannot
+// resurrect an already-stopped instance — set KEEP_WARM_MS below the host's idle
+// window. Off by default (0): always-on hosts don't need it.
+const KEEP_WARM_MS = Number(process.env.KEEP_WARM_MS || 0);
+function startKeepWarm() {
+  if (!KEEP_WARM_MS) return;
+  const target = process.env.KEEP_WARM_URL || `http://localhost:${PORT}/api/health`;
+  const t = setInterval(() => {
+    const mod = target.startsWith("https:") ? httpsMod : http;
+    try {
+      const r = mod.get(target, (res) => { res.resume(); });
+      r.on("error", () => {});
+      r.setTimeout(10000, () => r.destroy());
+    } catch { /* ignore */ }
+  }, KEEP_WARM_MS);
+  t.unref?.();
+  // eslint-disable-next-line no-console
+  console.log(`[verify-api] keep-warm: pinging ${target} every ${KEEP_WARM_MS}ms`);
+}
+
 server.listen(PORT, () => {
   const keyed = KEY_LIMITS.size;
   // eslint-disable-next-line no-console
   console.log(`[verify-api] http://localhost:${PORT}  —  ${SUPPORTED_TYPES.length} circuit types, ngspice server-side`);
   // eslint-disable-next-line no-console
   console.log(`[verify-api] cors=${CORS_WILDCARD ? "*" : CORS_ORIGINS.join(",")}  anon=${ANON_LIMIT}/win  keyedKeys=${keyed}  window=${WINDOW_MS}ms  bodyCap=${MAX_BODY_BYTES}B`);
+  startKeepWarm();
 });

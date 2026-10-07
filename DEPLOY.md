@@ -166,7 +166,9 @@ health check `/api/health`, free plan).
 | `ANON_RATE_LIMIT` | `10` | free anonymous tier, per IP, per window |
 | `RATE_WINDOW_MS` | `60000` | rate-limit window |
 | `MAX_BODY_BYTES` | `65536` | request-body cap (413 over this) |
-| `USAGE_FILE` | *(none)* | optional JSON path to persist per-key usage (point at a mounted persistent disk) |
+| `USAGE_FILE` | *(none)* | optional JSON path to persist per-key usage (point at a mounted persistent disk). Only **keyed** callers are written; anon-IP counts stay in memory, so the file stays bounded. |
+| `KEEP_WARM_MS` | `0` (off) | self-ping interval in ms to defeat idle spin-down. Set **below** the host's idle window — Render idles ~15 min, so `840000` (14 min) keeps a running instance alive. |
+| `KEEP_WARM_URL` | own `/api/health` | what the keep-warm pinger hits; override if the host needs an external URL. Cannot wake an already-stopped instance — it only prevents reaching idle. |
 
 No secrets are required to run. `API_KEYS` values are chosen by you — set them in
 the host's dashboard/CLI, never in git.
@@ -281,10 +283,52 @@ Errors are JSON `{ "ok": false, "error": "..." }` with status `400` (bad input),
 
 ---
 
+## 4. MCP server — the truth-layer for AI agents
+
+The same verified-design core is also an **MCP server** (`server/mcpServer.mjs`) over
+stdio, so any MCP-capable agent can SPICE-verify a circuit mid-reasoning instead of
+guessing. It runs **in-process** (ngspice, no network, no cold start) and shares
+`server/apiCore.mjs` with the HTTP API, so a verify over MCP and over HTTP agree.
+
+```bash
+npm run mcp                   # stdio JSON-RPC MCP server; no port, no secrets
+```
+
+**Tools:** `verify_circuit` (prompt or `{type,targets}` → verified design + BOM +
+netlist), `parse_prompt`, `compose_circuit`, `list_circuit_types`.
+
+Register with **Claude Desktop** (`claude_desktop_config.json`) — or any MCP client:
+
+```jsonc
+{
+  "mcpServers": {
+    "autocda": {
+      "command": "node",
+      "args": ["--import", "./server/loader.mjs", "server/mcpServer.mjs"],
+      "cwd": "/absolute/path/to/autocda"     // repo root
+    }
+  }
+}
+```
+
+Smoke test by hand (newline-delimited JSON-RPC on stdin):
+```bash
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"verify_circuit","arguments":{"prompt":"low-pass filter at 1 kHz"}}}' \
+  | npm run --silent mcp
+```
+
+> MCP calls are **serialized** (the wasm engine is non-reentrant): an agent firing
+> several at once gets them run back-to-back, each correct, never interleaved.
+
+---
+
 ## Local dev
 
 ```bash
 npm start                     # app on http://localhost:3000
-npm run verify-api            # API on http://localhost:3002
+npm run verify-api            # HTTP API on http://localhost:3002
+npm run mcp                   # MCP server on stdio (for agents)
 npm run pricing-proxy         # optional pricing proxy on :3001 (needs distributor keys in .env)
 ```
