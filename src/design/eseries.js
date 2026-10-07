@@ -110,6 +110,53 @@ export function synthesizeResistor(target, series = "E24") {
 }
 
 /**
+ * Synthesize a near-arbitrary capacitance from TWO standard capacitors (Theme B3).
+ * Capacitors are not made to fine (E96) tolerances, so a single part sets a coarse
+ * floor; two in parallel (C = Ca + Cb) or series (C = Ca·Cb/(Ca+Cb)) reach a far
+ * denser value set and close the sub-1% gap for capacitor-dominant blocks (RC
+ * filters, Wien oscillator). Note the duality with resistors: for caps PARALLEL
+ * adds and SERIES reduces — the opposite of resistors.
+ * @param {number} target  desired capacitance (farads)
+ * @param {string} [series="E24"]  caps top out at E24 in practice
+ * @returns {{ value:number, mode:"single"|"series"|"parallel", a:number, b:number|null, errorPct:number }}
+ */
+export function synthesizeCapacitor(target, series = "E24") {
+  if (!(target > 0) || !isFinite(target)) return { value: target, mode: "single", a: target, b: null, errorPct: 0 };
+  const logErr = (v) => Math.abs(Math.log(v / target));
+  const single = snap(target, series);
+  let best = { value: single, mode: "single", a: single, b: null, errorPct: Math.abs(single - target) / target, _e: logErr(single) };
+  // Parallel ADDS: both parts <= target. Series REDUCES: both parts >= target.
+  const lows = valuesInRange(target / 3, target * 1.001, series);
+  const highs = valuesInRange(target * 0.999, target * 3, series);
+  for (let i = 0; i < lows.length; i++) {
+    for (let j = i; j < lows.length; j++) {
+      const v = lows[i] + lows[j];
+      const e = logErr(v);
+      if (e < best._e) best = { value: +v.toPrecision(12), mode: "parallel", a: lows[i], b: lows[j], errorPct: Math.abs(v - target) / target, _e: e };
+    }
+  }
+  for (let i = 0; i < highs.length; i++) {
+    for (let j = i; j < highs.length; j++) {
+      const v = (highs[i] * highs[j]) / (highs[i] + highs[j]);
+      const e = logErr(v);
+      if (e < best._e) best = { value: +v.toPrecision(12), mode: "series", a: highs[i], b: highs[j], errorPct: Math.abs(v - target) / target, _e: e };
+    }
+  }
+  delete best._e;
+  return best;
+}
+
+/**
+ * Synthesize a near-arbitrary value for a part of either kind, picking the right
+ * combination algebra from the unit ("F" → capacitor, else resistor).
+ * @param {number} target
+ * @param {{series?:string, unit?:string}} [opts]
+ */
+export function synthesizePart(target, { series = "E24", unit = "Ω" } = {}) {
+  return unit === "F" ? synthesizeCapacitor(target, series) : synthesizeResistor(target, series);
+}
+
+/**
  * All standard values from the decade below `value` up to the decade above,
  * sorted ascending. Covers boundary cases (e.g. 9.5k snapping up to 10k).
  */

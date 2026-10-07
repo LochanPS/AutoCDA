@@ -21,7 +21,15 @@ import { applyValue } from "../design/eseries";
 import { designerAgent } from "./designerAgent";
 import { refineAgent } from "./refineAgent";
 import { reasoningAgent } from "./reasoningAgent";
-import { isVerifiable, circuitTargetInfo } from "./simulatorAgent";
+import { isVerifiable, circuitTargetInfo, buildNetlist } from "./simulatorAgent";
+import { collectMetrics } from "./metricsAgent";
+import { reproStamp } from "../sim/repro";
+
+const valueMapOf = (components) => {
+  const m = {};
+  for (const c of components || []) if (c.rawValue != null) m[c.ref] = c.rawValue;
+  return m;
+};
 
 // Rebuild the display circuit (graph/explanation/derived) from final components.
 function displayCircuit(type, targets, components) {
@@ -99,6 +107,20 @@ export async function orchestrate(spec, { runSpice, onStatus, strategy = "reason
   const converged = refine.best.errorPct <= tol;
   status(converged ? "Verified in SPICE" : "Best-effort design");
 
+  // B5 — reproducibility stamp: engine + hash of the exact verified netlist, so
+  // the result is auditable and re-runnable. Built from the final components.
+  const finalMap = valueMapOf(finalComponents);
+  const verifiedNetlist = buildNetlist(type, finalMap, targets);
+  const reproducibility = verifiedNetlist ? reproStamp(verifiedNetlist) : null;
+
+  // B2 — richer measured metrics (post-verify, best-effort; never fails the
+  // result). Oscillator amplitude/THD, regulator line/load regulation, etc.
+  let metrics = null;
+  if (converged) {
+    status("Measuring richer metrics (amplitude, THD, regulation)");
+    metrics = await collectMetrics({ type, targets, valueMap: finalMap, runSpice }).catch(() => null);
+  }
+
   return {
     circuit: displayCircuit(type, targets, finalComponents),
     components: finalComponents,
@@ -114,6 +136,8 @@ export async function orchestrate(spec, { runSpice, onStatus, strategy = "reason
     tolerance: tol,
     trace: refine.trace,
     errors: refine.errors,
+    metrics,
+    reproducibility,
   };
 }
 

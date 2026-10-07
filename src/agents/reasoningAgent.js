@@ -30,7 +30,7 @@
  * without the wasm engine, and runs against real ngspice in the app/benchmark.
  */
 
-import { snap, neighbors, applyValue, synthesizeResistor } from "../design/eseries";
+import { snap, neighbors, applyValue, synthesizePart } from "../design/eseries";
 import { simulatorAgent, dominantRef } from "./simulatorAgent";
 
 export const MAX_ITERATIONS = 6;
@@ -360,36 +360,48 @@ export async function reasoningAgent({
     }
   }
 
-  // Phase 4: series/parallel resistor synthesis for sub-tolerance precision.
-  // Realize a trim RESISTOR as two standard parts whose equivalent resistance is
-  // near-arbitrary (the combo's value set is effectively continuous), beating the
-  // single-part floor. SPICE sees the equivalent resistance, so no netlist change;
-  // the BOM lists the two parts. ~3 extra simulations, only when still short.
+  // Phase 4: series/parallel PART synthesis for sub-tolerance precision.
+  // Realize a trim part as two standard parts whose equivalent value is near-
+  // arbitrary (the combo's value set is effectively continuous), beating the
+  // single-part floor. SPICE sees the equivalent value, so no netlist change; the
+  // BOM lists the two parts. Resistors synthesize on E96, capacitors on E24 (caps
+  // aren't made to fine tolerances) — the honest trade is 2 parts for the accuracy
+  // a single standard value can't reach. ~3 extra simulations each, only if short.
+  //
+  // Try two levers: the trim RESISTOR, and — for a capacitor-dominant block (RC
+  // filter, Wien oscillator) — the dominant CAPACITOR itself (B3). Keep whichever
+  // lands closest.
   let synthesis = null;
-  if (synth && best && best.errorPct > tolerance) {
-    const sref = unitOf(dominant) === "F" ? "R1" : dominant;
-    if (unitOf(sref) === "Ω" && finalVals[sref] != null) {
-      const r0 = finalVals[sref];
-      const g0 = await grade({ valueMap: { ...finalVals, [sref]: r0 } });
-      const g1 = await grade({ valueMap: { ...finalVals, [sref]: r0 * 1.25 } });
-      const m0 = g0.measured, m1 = g1.measured, target = g0.target;
-      let idealR = null;
-      if (finite(m0) && finite(m1) && m0 > 0 && m1 > 0 && m0 !== m1) {
-        const p = Math.log(m1 / m0) / Math.log(1.25);
-        if (finite(p) && Math.abs(p) > 1e-6) idealR = r0 * Math.pow(target / m0, 1 / p);
-      }
-      if (finite(idealR) && idealR > 0) {
-        const syn = synthesizeResistor(idealR, "E96");
-        const gS = await grade({ valueMap: { ...finalVals, [sref]: syn.value } });
-        const eS = !finite(gS.measured) || !finite(gS.target) || gS.target === 0 ? null : Math.abs((gS.measured - gS.target) / gS.target);
-        trace.push({ ref: sref, value: syn.value, measured: gS.measured, errorPct: eS, rationale: `synthesize ${sref}=${syn.a}${syn.mode === "series" ? "+" : "∥"}${syn.b ?? ""} (${syn.mode})` });
-        if (eS != null && eS < best.errorPct) {
-          finalVals[sref] = syn.value;
-          best = { ref: sref, candidate: syn.value, measured: gS.measured, errorPct: eS };
-          if (syn.mode !== "single" && syn.b != null) synthesis = { ref: sref, ...syn };
-        }
-      }
+  const trySynthesis = async (ref) => {
+    const unit = unitOf(ref);
+    const series = unit === "F" ? "E24" : "E96";
+    if (!(unit === "Ω" || unit === "F") || finalVals[ref] == null) return;
+    const x0 = finalVals[ref];
+    const g0 = await grade({ valueMap: { ...finalVals, [ref]: x0 } });
+    const g1 = await grade({ valueMap: { ...finalVals, [ref]: x0 * 1.25 } });
+    const m0 = g0.measured, m1 = g1.measured, target = g0.target;
+    let ideal = null;
+    if (finite(m0) && finite(m1) && m0 > 0 && m1 > 0 && m0 !== m1) {
+      const p = Math.log(m1 / m0) / Math.log(1.25);
+      if (finite(p) && Math.abs(p) > 1e-6) ideal = x0 * Math.pow(target / m0, 1 / p);
     }
+    if (!(finite(ideal) && ideal > 0)) return;
+    const syn = synthesizePart(ideal, { series, unit });
+    const gS = await grade({ valueMap: { ...finalVals, [ref]: syn.value } });
+    const eS = !finite(gS.measured) || !finite(gS.target) || gS.target === 0 ? null : Math.abs((gS.measured - gS.target) / gS.target);
+    const join = syn.mode === "series" ? (unit === "F" ? "–" : "+") : "∥";
+    trace.push({ ref, value: syn.value, measured: gS.measured, errorPct: eS, rationale: `synthesize ${ref}=${syn.a}${join}${syn.b ?? ""} (${syn.mode}, ${unit === "F" ? "E24" : "E96"})` });
+    if (eS != null && eS < best.errorPct) {
+      finalVals[ref] = syn.value;
+      best = { ref, candidate: syn.value, measured: gS.measured, errorPct: eS };
+      if (syn.mode !== "single" && syn.b != null) synthesis = { ref, ...syn };
+    }
+  };
+  if (synth && best && best.errorPct > tolerance) {
+    // The trim resistor: the dominant if it's a resistor, else R1.
+    await trySynthesis(unitOf(dominant) === "F" ? "R1" : dominant);
+    // The dominant capacitor itself, if that's what sets the target and we're short.
+    if (unitOf(dominant) === "F" && best.errorPct > tolerance) await trySynthesis(dominant);
   }
 
   const finalComponents = snapped.map((c) => {

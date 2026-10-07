@@ -42,6 +42,7 @@ const BOM_PRICE_SOURCE = process.env.REACT_APP_PRICING_PROXY
   : null;
 import { runToleranceSweep } from "./design/montecarlo";
 import { optimizeMulti } from "./design/optimize";
+import { parametricSearch } from "./design/paramSearch";
 import { usePro } from "./pro/ProContext";
 import { ProButton, ProUpsell, ProGate } from "./pro/ProUI";
 
@@ -728,6 +729,7 @@ export default function App() {
                 {activeTab === "optimize" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                     <OptimizePanel circuit={selectedCircuit} onApply={handleApplyOptimized} />
+                    <ConstrainedSearchPanel circuit={selectedCircuit} onApply={handleApplyOptimized} />
                   </div>
                 )}
                 {activeTab === "buildlog" && (
@@ -914,8 +916,37 @@ function ResultSummary({ circuit }) {
           ))}
         </div>
       )}
+
+      {v?.metrics && Object.keys(v.metrics).length > 0 && (
+        <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)", padding: "10px 20px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Measured metrics</span>
+          {Object.entries(v.metrics).map(([k, m]) => (
+            <span key={k} title={m.label} className="tnum" style={{ fontSize: "var(--fs-xs)", color: "var(--text)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", padding: "3px 8px" }}>
+              {m.label}: {fmtMetric(m.value)} {m.unit}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {v?.reproducibility && (
+        <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)", padding: "9px 20px", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", fontSize: "var(--fs-xs)", color: "var(--text-2)" }}>
+          <span style={{ color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Reproducibility</span>
+          <span className="tnum" style={{ color: "var(--text-3)" }}>{v.reproducibility.engine} v{v.reproducibility.engineVersion}</span>
+          <span className="tnum" title={`${v.reproducibility.hashAlgo} hash of the verified netlist`} style={{ fontFamily: "var(--font-mono)", color: "var(--text)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", padding: "2px 7px" }}>
+            netlist #{v.reproducibility.netlistHash}
+          </span>
+        </div>
+      )}
     </div>
   );
+}
+
+// Compact metric formatter: 3 sig-figs, no exponent noise for the usual ranges.
+function fmtMetric(x) {
+  if (typeof x !== "number" || !isFinite(x)) return "n/a";
+  const a = Math.abs(x);
+  if (a !== 0 && (a < 0.01 || a >= 1e5)) return x.toExponential(2);
+  return String(Number(x.toPrecision(3)));
 }
 
 function Stat({ label, value, accent }) {
@@ -1474,6 +1505,139 @@ function OptimizePanel({ circuit, onApply }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A4: parametric search over intent — pick ONE objective and a HARD error cap,
+// search the buyable grid (each candidate SPICE-graded), keep only the in-spec
+// parts, and rank by the objective. "Cheapest that still passes", verified.
+const SEARCH_OBJ = [
+  { id: "cost", label: "Cheapest", dir: "min" },
+  { id: "power", label: "Lowest power", dir: "min" },
+  { id: "yield", label: "Highest yield", dir: "max" },
+  { id: "error", label: "Most accurate", dir: "min" },
+];
+
+function ConstrainedSearchPanel({ circuit, onApply }) {
+  const { isPro } = usePro();
+  const v = circuit.verification;
+  const [objective, setObjective] = useState("cost");
+  const [maxErrPct, setMaxErrPct] = useState(String(((v?.tolerance ?? 0.05) * 100)));
+  const [running, setRunning] = useState(false);
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState("");
+
+  if (!v?.verifiable) return null;
+  if (!isPro) return null; // the weighted OptimizePanel already shows the Pro upsell above
+
+  const objMeta = SEARCH_OBJ.find((o) => o.id === objective) || SEARCH_OBJ[0];
+  const run = async () => {
+    setRunning(true); setErr(""); setRes(null);
+    const cap = parseFloat(maxErrPct);
+    if (!(cap > 0)) { setErr("Enter a positive max-error %."); setRunning(false); return; }
+    try {
+      const out = await parametricSearch({
+        type: circuit.id,
+        targets: v.targets,
+        components: circuit.components,
+        objective,
+        errorConstraint: cap / 100,
+        tolerance: v.tolerance ?? 0.05,
+        runSpice,
+      });
+      setRes(out);
+    } catch (e) {
+      setErr(String(e.message || e));
+    }
+    setRunning(false);
+  };
+
+  const td = { padding: "8px 12px", fontSize: "var(--fs-sm)", borderBottom: "1px solid var(--border)" };
+  const tdR = { ...td, textAlign: "right", fontFamily: "var(--font-mono)" };
+  const th = { ...td, color: "var(--text-3)", fontSize: "var(--fs-xs)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, textAlign: "right" };
+  const partsOf = (c) => (c.components || []).filter((p) => p.unit === "Ω" || p.unit === "F").map((p) => `${p.ref} ${p.display}`).join(" · ");
+  const objVal = (c) => {
+    if (objective === "cost") return `$${Number(c.cost).toFixed(3)}`;
+    if (objective === "power") return fmtPower(c.power);
+    if (objective === "yield") return c.yield != null ? `${(c.yield * 100).toFixed(0)}%` : "—";
+    return c.errorPct != null ? `${(c.errorPct * 100).toFixed(2)}%` : "—";
+  };
+  const ranked = res ? res.ranked.slice(0, 6) : [];
+
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r)", boxShadow: "var(--shadow-sm)", overflow: "hidden" }}>
+      <div style={{ padding: "14px 18px", borderBottom: res || running ? "1px solid var(--border)" : "none" }}>
+        <div style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}>Parametric search</div>
+        <div style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)", marginTop: "2px" }}>
+          One objective under a hard error cap — the best buyable design that still verifies. e.g. the cheapest parts within 2% error.
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 18px", marginTop: "14px", alignItems: "flex-end" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-2)", fontWeight: 600 }}>Objective</span>
+            <select value={objective} disabled={running} onChange={(e) => setObjective(e.target.value)}
+              style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "8px 10px", color: "var(--text)", fontSize: "var(--fs-sm)" }}>
+              {SEARCH_OBJ.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-2)", fontWeight: 600 }}>Max error (%)</span>
+            <input value={maxErrPct} disabled={running} onChange={(e) => setMaxErrPct(e.target.value)} placeholder="2"
+              style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "8px 10px", color: "var(--text)", fontSize: "var(--fs-sm)", width: "90px" }} />
+          </label>
+          <button onClick={run} disabled={running}
+            style={{ background: running ? "var(--surface-2)" : "var(--accent)", border: "none", borderRadius: "var(--r-sm)", color: running ? "var(--text-3)" : "#fff", fontSize: "var(--fs-sm)", fontWeight: 600, padding: "9px 16px", cursor: running ? "progress" : "pointer" }}>
+            {running ? "Searching…" : res ? "Search again" : `Find ${objMeta.label.toLowerCase()}`}
+          </button>
+        </div>
+        {err && <div style={{ color: "var(--danger)", fontSize: "var(--fs-xs)", marginTop: "8px" }}>{err}</div>}
+      </div>
+
+      {res && !running && (
+        <div style={{ overflowX: "auto" }}>
+          {res.reason && (
+            <div style={{ fontSize: "var(--fs-xs)", color: res.feasibleCount ? "var(--text-3)" : "var(--warn)", padding: "10px 18px 0", lineHeight: 1.5 }}>
+              {res.reason}
+              {res.bestEffort && (
+                <span> — best effort: <span style={{ fontFamily: "var(--font-mono)" }}>{partsOf(res.bestEffort)}</span> at {(res.bestEffort.errorPct * 100).toFixed(2)}% error
+                  <button onClick={() => onApply && onApply(res.bestEffort)} style={{ background: "none", border: "none", color: "var(--accent)", fontWeight: 600, cursor: "pointer", fontSize: "var(--fs-xs)" }}>Apply</button>
+                </span>
+              )}
+            </div>
+          )}
+          {res.feasibleCount > 0 && (
+            <>
+              <div style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)", padding: "10px 18px 0" }}>
+                {res.feasibleCount} in-spec candidate{res.feasibleCount === 1 ? "" : "s"} (≤ {parseFloat(maxErrPct)}% error) · ranked by {objMeta.label.toLowerCase()}
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "8px" }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...th, textAlign: "left" }}>Parts</th>
+                    <th style={th}>{objMeta.label}</th>
+                    <th style={th}>Error</th>
+                    <th style={th}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranked.map((c, i) => (
+                    <tr key={i} style={{ background: i === 0 ? "var(--accent-soft)" : "transparent" }}>
+                      <td style={{ ...td, fontFamily: "var(--font-mono)", fontSize: "var(--fs-xs)", color: "var(--text)" }}>
+                        {i === 0 && <span style={{ color: "var(--accent)", fontWeight: 700 }}>★ </span>}{partsOf(c)}
+                      </td>
+                      <td style={{ ...tdR, color: "var(--text)", fontWeight: i === 0 ? 700 : 400 }}>{objVal(c)}</td>
+                      <td style={{ ...tdR, color: "var(--success)" }}>{(c.errorPct * 100).toFixed(2)}%</td>
+                      <td style={tdR}>
+                        <button onClick={() => onApply && onApply(c)} style={{ background: "none", border: "none", color: "var(--accent)", fontSize: "var(--fs-xs)", fontWeight: 600, cursor: "pointer" }}>Apply</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </div>
       )}
     </div>

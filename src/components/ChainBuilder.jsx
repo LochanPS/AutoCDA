@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from "react";
 import ResultPlot from "./ResultPlot";
 import { runSpice } from "../sim/spice";
-import { composeCircuit, verifyComposition } from "../design/compose";
+import { composeCircuit, verifyComposition, checkImpedanceMatch, perStageErrors } from "../design/compose";
 import { buildBOM } from "../design/bom";
 import { SUPPORTED_TYPES } from "../spec/circuitSpec";
 
@@ -95,10 +95,14 @@ export default function ChainBuilder() {
     }
 
     setRunning(true);
-    let composition, v;
+    let composition, v, impedance, perStage;
     try {
-      composition = composeCircuit(stages.map((s) => ({ type: s.type, targets: s.targets })));
+      const specs = stages.map((s) => ({ type: s.type, targets: s.targets }));
+      composition = composeCircuit(specs);
       v = await verifyComposition(composition, { runSpice });
+      // A2 composition depth: inter-stage loading check + per-stage attribution.
+      impedance = checkImpedanceMatch(specs);
+      perStage = await perStageErrors(specs, { runSpice });
     } catch (e) {
       setRunning(false);
       const detail = (e && e.message ? String(e.message) : "").trim().slice(0, 160);
@@ -106,7 +110,7 @@ export default function ChainBuilder() {
       return;
     }
     const bom = buildBOM(composition.components);
-    setOut({ composition, v, bom });
+    setOut({ composition, v, bom, impedance, perStage });
     setRunning(false);
   }, [stages, running]);
 
@@ -183,8 +187,10 @@ export default function ChainBuilder() {
 
 const FILTER_RE = /lowpass|highpass|band_pass|integrator|differentiator|sallen|fourth_order/;
 
+const fmtOhm = (r) => (r == null ? "n/a" : r >= 1e9 ? "≈∞ (op-amp in)" : r >= 1e6 ? `${+(r / 1e6).toPrecision(3)} MΩ` : r >= 1e3 ? `${+(r / 1e3).toPrecision(3)} kΩ` : `${Math.round(r)} Ω`);
+
 function ChainResults({ out }) {
-  const { composition, v, bom } = out;
+  const { composition, v, bom, impedance, perStage } = out;
   const kind = composition.measureKind;
   const filterStages = composition.stages.filter((s) => FILTER_RE.test(s.type)).length;
   // The closed-form prediction is only trustworthy for pure-gain cascades and for
@@ -218,6 +224,65 @@ function ChainResults({ out }) {
           </div>
         )}
       </div>
+
+      {perStage && perStage.length > 0 && (
+        <div style={card}>
+          <div style={cardHead}>
+            <span style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}>Per-stage vs end-to-end</span>
+            <span style={badge}>each stage measured on its own</span>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr><th style={th}>Stage</th><th style={th}>Type</th><th style={thR}>Target</th><th style={thR}>Measured</th><th style={thR}>Error</th></tr>
+            </thead>
+            <tbody>
+              {perStage.map((p) => (
+                <tr key={p.stage}>
+                  <td style={{ ...td, color: "var(--text-2)" }}>{p.stage}</td>
+                  <td style={{ ...td, color: "var(--text)" }}>{typeName(p.type).replace(/ \(.*\)$/, "")}</td>
+                  <td className="tnum" style={tdR}>{p.target == null ? "—" : `${+p.target.toPrecision(4)} ${p.targetName || ""}`}</td>
+                  <td className="tnum" style={tdR}>{p.measured == null ? "n/a" : +p.measured.toPrecision(4)}</td>
+                  <td className="tnum" style={{ ...tdR, color: p.errorPct == null ? "var(--text-3)" : p.errorPct <= 0.05 ? "var(--success)" : "var(--warn)" }}>
+                    {p.errorPct == null ? "—" : `${(p.errorPct * 100).toFixed(2)}%`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)", padding: "9px 16px", fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>
+            A stage that passes on its own but drifts end-to-end points at an interface problem — see loading below.
+          </div>
+        </div>
+      )}
+
+      {impedance && impedance.length > 0 && (
+        <div style={card}>
+          <div style={cardHead}>
+            <span style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}>Inter-stage impedance match</span>
+            <span style={badge}>{impedance.filter((r) => r.ok === false).length ? "loading detected" : "well matched"}</span>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr><th style={th}>Interface</th><th style={thR}>Zout</th><th style={thR}>Zin (next)</th><th style={thR}>Loading loss</th><th style={th}>Verdict</th></tr>
+            </thead>
+            <tbody>
+              {impedance.map((r, i) => (
+                <tr key={i}>
+                  <td style={{ ...td, color: "var(--text-2)" }}>S{r.from} → S{r.to}</td>
+                  <td className="tnum" style={tdR}>{fmtOhm(r.zout)}</td>
+                  <td className="tnum" style={tdR}>{fmtOhm(r.zin)}</td>
+                  <td className="tnum" style={{ ...tdR, color: r.ok === false ? "var(--warn)" : "var(--text)" }}>
+                    {r.loadingErrorPct == null ? "—" : `${(r.loadingErrorPct * 100).toFixed(1)}%`}
+                  </td>
+                  <td style={{ ...td, color: r.ok === false ? "var(--warn)" : r.ok ? "var(--success)" : "var(--text-3)", fontSize: "var(--fs-xs)" }}>
+                    {r.ok == null ? "not modeled" : r.ok ? "ok" : "add a buffer"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div style={card}>
         <div style={cardHead}><span style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}>Combined schematic</span></div>

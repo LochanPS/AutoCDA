@@ -76,3 +76,35 @@ describe("synthesizeResistor()", () => {
     expect(syn.errorPct).toBeLessThan(1e-9);
   });
 });
+
+describe("synthesizeCapacitor() (B3)", () => {
+  const { synthesizeCapacitor, synthesizePart } = require("./eseries");
+
+  test("beats the single-part floor for an awkward capacitance", () => {
+    const target = 1.37e-8; // 13.7 nF, between E24 values
+    const single = snap(target, "E24");
+    const singleErr = Math.abs(single - target) / target;
+    const syn = synthesizeCapacitor(target, "E24");
+    expect(syn.errorPct).toBeLessThan(singleErr);
+    expect(syn.errorPct).toBeLessThan(0.01); // sub-1%
+    expect(["series", "parallel", "single"]).toContain(syn.mode);
+  });
+
+  test("parallel pair ADDS; series pair REDUCES (capacitor duality)", () => {
+    const syn = synthesizeCapacitor(2.7e-8, "E24");
+    if (syn.mode === "parallel") expect(syn.a + syn.b).toBeCloseTo(syn.value, 15);
+    if (syn.mode === "series") expect((syn.a * syn.b) / (syn.a + syn.b)).toBeCloseTo(syn.value, 15);
+  });
+
+  test("an exact E24 capacitance needs no pair", () => {
+    expect(synthesizeCapacitor(1e-8, "E24").errorPct).toBeLessThan(1e-9);
+  });
+
+  test("synthesizePart dispatches on unit", () => {
+    expect(synthesizePart(13700, { unit: "Ω" }).value).toBeGreaterThan(0);
+    const c = synthesizePart(1.37e-8, { unit: "F" });
+    expect(c.value).toBeGreaterThan(0);
+    // capacitor result uses cap combination algebra
+    if (c.mode === "parallel") expect(c.a + c.b).toBeCloseTo(c.value, 15);
+  });
+});

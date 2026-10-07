@@ -63,16 +63,22 @@ key build for "the tool you always open."*
   filters (multiple-feedback, state-variable), instrumentation amp, current mirror,
   push-pull output, voltage reference, RC/LC tank, comparator with hysteresis,
   precision rectifier, 555-style timing. Each with its own schematic + verified loop.
-- **A2. Composition depth.** The chain builder exists — extend it: branching (not
-  just series), impedance-matching checks between stages, and per-stage vs end-to-end
-  error reporting. "Any circuit" largely = verified blocks + good composition.
+- **A2. Composition depth.** ✅ *shipped* (`src/design/compose.js`): `composeGraph`
+  wires stages as a tree/DAG (fan-out, multiple measured outputs), not just a line;
+  `checkImpedanceMatch` flags inter-stage loading (Zout/Zin → "insert a buffer");
+  `perStageErrors` attributes a composed miss to the stage that drifted. Real-ngspice
+  verified (fan-out low-pass + high-pass branches both measured). "Any circuit"
+  largely = verified blocks + good composition.
 - **A3. LLM topology proposal → verify.** For intents with no closed-form template,
   let the LLM *propose* a topology, then run it through the **same deterministic
   verify loop**. The LLM never gets the final word — the simulator does. This is the
   honest path to open-ended coverage without sacrificing trust.
-- **A4. Parametric search intent.** "Cheapest low-pass under 2% error at 1 kHz" or
-  "lowest-power divider" — turn the optimizer into a first-class search over intent,
-  not just a Pro panel.
+- **A4. Parametric search intent.** ✅ *shipped* (`src/design/paramSearch.js`):
+  `parseSearchIntent` reads an objective + hard error cap ("cheapest … under 2% at
+  1 kHz", "lowest-power divider"); `parametricSearch` grades the buyable grid via
+  the SPICE path, keeps only the feasible (in-spec) parts, and ranks them by the
+  objective (cost/power/error min, yield max) — a verified "cheapest that still
+  passes", with an honest best-effort + reason when the constraint can't be met.
 
 ## Theme B — Verification depth: prove more, prove harder
 

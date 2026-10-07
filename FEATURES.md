@@ -187,9 +187,22 @@ AI-in-the-loop refinement mode* — not "an AI that designs circuits."
 
 ## 6. Known limits & roadmap
 
-- Reliable **sub-1% tolerance** needs series/parallel resistor combinations; today
-  a single standard part sets the ~1% floor (the loop returns the best part and
-  reports the honest error).
+- **Sub-1% tolerance** is reached via **series/parallel part synthesis** — the loop
+  realizes a trim resistor on E96 (and, for capacitor-dominant blocks, the cap on
+  E24) as two standard parts whose equivalent value beats the single-part floor
+  (`synthesizeResistor` / `synthesizeCapacitor` in `src/design/eseries.js`); the BOM
+  lists both parts and the honest measured error.
+- **Richer measured metrics** (`src/sim/metrics.js`, `src/sim/transient.js`):
+  oscillator amplitude (Vpp/RMS) + THD and regulator line/load regulation are
+  measured and surfaced today; settling time, slew rate, overshoot, rise time,
+  phase/gain margin, output impedance and PSRR analyzers ship ready to wire when
+  non-ideal device models land.
+- **Corner & environment analysis** (`src/design/corners.js`): every verified
+  design is re-measured at temperature, supply, and process corners — "verified
+  across conditions," not just nominal — complementing the random Monte-Carlo sweep.
+- **Reproducibility stamp** (`src/sim/repro.js`): each result carries the engine
+  version + a hash of the exact verified netlist, so a result is auditable and
+  re-runnable.
 - **BOM pricing** uses a bundled static catalog; a live distributor API is the
   drop-in upgrade.
 - **SPICE aggregates** (yield, end-to-end design benchmark) run via in-browser dev
