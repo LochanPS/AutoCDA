@@ -75,3 +75,31 @@ describe("parseWithLLM", () => {
     await expect(parseWithLLM("x", { fetchImpl: fakeFetch })).rejects.toThrow(/401/);
   });
 });
+
+describe("extractJsonObject (free-model JSON mode)", () => {
+  const { extractJsonObject, extractSpecArgs } = require("./llmParser");
+
+  test("plain JSON", () => {
+    expect(extractJsonObject('{"type":"rc_lowpass","targets":{"fc":1000},"confidence":0.9}'))
+      .toEqual({ type: "rc_lowpass", targets: { fc: 1000 }, confidence: 0.9 });
+  });
+
+  test("markdown-fenced JSON (common on free models)", () => {
+    const t = "```json\n{\"type\":\"voltage_divider\",\"targets\":{\"Vin\":12,\"Vout\":5}}\n```";
+    expect(extractJsonObject(t)).toEqual({ type: "voltage_divider", targets: { Vin: 12, Vout: 5 } });
+  });
+
+  test("JSON wrapped in prose", () => {
+    const t = 'Sure! Here is the spec: {"type":"led_limiter","targets":{"Vsupply":5,"I":0.02}} — hope that helps.';
+    expect(extractJsonObject(t)).toEqual({ type: "led_limiter", targets: { Vsupply: 5, I: 0.02 } });
+  });
+
+  test("throws on no object", () => {
+    expect(() => extractJsonObject("no json here")).toThrow();
+  });
+
+  test("extractSpecArgs reads OpenRouter content JSON", () => {
+    const data = { choices: [{ message: { content: '{"type":"opamp_inverting","targets":{"Av":10},"confidence":0.8}' } }] };
+    expect(extractSpecArgs("openrouter", data)).toMatchObject({ type: "opamp_inverting" });
+  });
+});

@@ -53,7 +53,11 @@ export function selectProvider() {
       name: "openrouter",
       key: or,
       url: "https://openrouter.ai/api/v1/chat/completions",
-      model: env("OPENROUTER_MODEL") || "anthropic/claude-3.5-sonnet",
+      // Default to a FREE model so a $0 OpenRouter key works out of the box. Paid
+      // models (e.g. anthropic/claude-3.5-sonnet) need credits — set OPENROUTER_MODEL
+      // to one if you've funded the account. Free slugs rotate: see
+      // https://openrouter.ai/models?max_price=0
+      model: env("OPENROUTER_MODEL") || "meta-llama/llama-3.3-70b-instruct:free",
     };
   }
   const an = env("REACT_APP_ANTHROPIC_KEY");
@@ -68,18 +72,30 @@ export function selectProvider() {
   return null;
 }
 
-/** Pull the tool-call arguments object out of a provider response. Exported for tests. */
-export function extractToolArgs(provider, data) {
+// Instruction appended for JSON-mode providers (free models rarely do forced
+// function-calling, but will return a JSON object when asked plainly).
+const JSON_INSTRUCTION =
+  `Respond with ONLY a JSON object, no prose and no markdown fences: ` +
+  `{"type": one of [${TYPE_ENUM.join(", ")}], "targets": an object of numeric fields, "confidence": 0..1}.`;
+
+/** Pull the first balanced JSON object out of free-form model text. Exported for tests. */
+export function extractJsonObject(text) {
+  if (typeof text !== "string") throw new Error("LLM returned no content");
+  const s = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  const i = s.indexOf("{");
+  const j = s.lastIndexOf("}");
+  if (i < 0 || j < 0 || j < i) throw new Error("no JSON object in LLM response");
+  return JSON.parse(s.slice(i, j + 1));
+}
+
+/** Pull the structured spec args out of a provider response. Exported for tests. */
+export function extractSpecArgs(provider, data) {
   if (provider === "openrouter") {
-    const call = data?.choices?.[0]?.message?.tool_calls?.[0];
-    if (!call?.function?.arguments) throw new Error("LLM returned no tool call");
-    try {
-      return typeof call.function.arguments === "string" ? JSON.parse(call.function.arguments) : call.function.arguments;
-    } catch {
-      throw new Error("LLM tool arguments were not valid JSON");
-    }
+    // JSON mode: the spec is the JSON object in the message content.
+    const content = data?.choices?.[0]?.message?.content;
+    return extractJsonObject(content);
   }
-  // anthropic
+  // anthropic: forced tool_use block.
   const block = (data.content || []).find((b) => b.type === "tool_use");
   if (!block || !block.input) throw new Error("LLM returned no structured output");
   return block.input;
@@ -103,14 +119,16 @@ export async function parseWithLLM(text, { fetchImpl = (typeof fetch !== "undefi
       "HTTP-Referer": "https://auto-cda-phi.vercel.app",
       "X-Title": "AutoCDA",
     };
+    // JSON mode, not function-calling: works on free OpenRouter models that don't
+    // support forced tool calls. response_format is a hint; the parser is tolerant
+    // of models that ignore it and just return the object (or wrap it in fences).
     body = {
       model: p.model,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: `${SYSTEM_PROMPT} ${JSON_INSTRUCTION}` },
         { role: "user", content: text },
       ],
-      tools: [{ type: "function", function: { name: TOOL_NAME, description: TOOL_DESCRIPTION, parameters: TOOL_PARAMETERS } }],
-      tool_choice: { type: "function", function: { name: TOOL_NAME } },
+      response_format: { type: "json_object" },
       max_tokens: 400,
     };
   } else {
@@ -137,7 +155,7 @@ export async function parseWithLLM(text, { fetchImpl = (typeof fetch !== "undefi
     throw new Error(`LLM request failed (${res.status})${detail ? `: ${detail}` : ""}`);
   }
   const data = await res.json();
-  return mapToSpec(extractToolArgs(p.name, data));
+  return mapToSpec(extractSpecArgs(p.name, data));
 }
 
 /**
