@@ -18,6 +18,7 @@ import { makeSpec, SUPPORTED_TYPES } from "../src/spec/circuitSpec.js";
 import { parsePrompt } from "../src/utils/circuitParser.js";
 import { buildBOM } from "../src/design/bom.js";
 import { composeCircuit, verifyComposition } from "../src/design/compose.js";
+import { parseWithLLM, selectProvider } from "../src/parse/llmParser.js";
 import { collectMetrics } from "../src/agents/metricsAgent.js";
 import { reproStamp } from "../src/sim/repro.js";
 import { landedCostINR, envLandedOpts } from "../src/design/sourcing.js";
@@ -33,12 +34,22 @@ export function runParse(prompt) {
   return parsePrompt(prompt);
 }
 
-function specFromRequest(body) {
+async function specFromRequest(body) {
   // Accept either a natural-language prompt or an explicit {type, targets}.
   if (body.prompt) {
     const p = parsePrompt(body.prompt);
+    // Server-side LLM fallback: when the regex parser is unsure AND a key is
+    // configured in the environment (OPENROUTER_API_KEY / REACT_APP_ANTHROPIC_KEY),
+    // ask the LLM. The key stays on the server — never in a client bundle. Opt out
+    // per request with { llm: false }. Any LLM error falls back to the regex result.
+    const unsure = !p.type || p.confidence < 0.9;
+    if (unsure && body.llm !== false && selectProvider()) {
+      try {
+        return { spec: await parseWithLLM(body.prompt), via: "llm" };
+      } catch { /* fall back to the regex result below */ }
+    }
     if (!p.type || p.confidence === 0) return { error: `could not parse "${body.prompt}"`, parsed: p };
-    return { spec: makeSpec({ type: p.type, targets: p.targets, constraints: p.constraints, confidence: p.confidence, assumed: p.assumed }) };
+    return { spec: makeSpec({ type: p.type, targets: p.targets, constraints: p.constraints, confidence: p.confidence, assumed: p.assumed }), via: "regex" };
   }
   if (body.type) {
     try {
@@ -51,7 +62,7 @@ function specFromRequest(body) {
 }
 
 export async function runVerify(body) {
-  const sr = specFromRequest(body);
+  const sr = await specFromRequest(body);
   if (sr.error) return { status: 422, payload: { ok: false, ...sr } };
   const spec = sr.spec;
   const strategy = body.strategy === "grid" ? "grid" : "reasoning";
@@ -102,6 +113,7 @@ export async function runVerify(body) {
       ok: true,
       type: spec.type,
       name: circuit.name || spec.type,
+      via: sr.via || "regex",
       targets: spec.targets,
       constraints: spec.constraints,
       verified: !!res.verifiable,

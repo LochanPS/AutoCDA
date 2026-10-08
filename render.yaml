@@ -33,3 +33,10 @@ services:
         value: "600000"
       - key: KEEP_WARM_URL
         value: https://autocda-verify-api.onrender.com/api/health
+      # Optional server-side LLM parse fallback for messy phrasings (key stays on
+      # the server, never in a client bundle). sync:false = paste it in the Render
+      # dashboard, not in this file. A $0 OpenRouter key can only call :free models.
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: meta-llama/llama-3.3-70b-instruct:free

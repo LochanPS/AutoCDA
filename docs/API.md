@@ -124,6 +124,12 @@ Response (abridged):
 
 `422` when the prompt can't be parsed or the spec is invalid (the body says why).
 
+**Server-side LLM fallback.** When the regex parser is unsure *and* a key is set in
+the server environment (`OPENROUTER_API_KEY`, or `REACT_APP_ANTHROPIC_KEY`),
+`/api/verify` asks the LLM to resolve the intent — the key never leaves the server.
+Opt out per request with `{ "llm": false }`. With no key, the endpoint is regex-only
+(unchanged). The response's `via` field reports `"llm"` or `"regex"`.
+
 ### `POST /api/compose`
 
 ```jsonc

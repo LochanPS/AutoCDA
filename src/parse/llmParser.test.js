@@ -39,7 +39,11 @@ describe("mapToSpec", () => {
 
 describe("parseWithLLM", () => {
   const KEY = "REACT_APP_ANTHROPIC_KEY";
-  afterEach(() => { delete process.env[KEY]; });
+  const OR = "OPENROUTER_API_KEY";
+  // Isolate from any ambient .env keys so provider selection is deterministic.
+  let saved;
+  beforeEach(() => { saved = { [KEY]: process.env[KEY], [OR]: process.env[OR] }; delete process.env[KEY]; delete process.env[OR]; });
+  afterEach(() => { for (const k of [KEY, OR]) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; } });
 
   test("throws a clear error when no key is set", async () => {
     delete process.env[KEY];
