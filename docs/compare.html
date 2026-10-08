@@ -1,0 +1,49 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AutoCDA — Raw LLM vs Verified</title><style>
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--mono:ui-monospace,Menlo,monospace}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 -apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:840px;margin:0 auto;padding:30px 18px 60px}h1{font-size:23px;margin:0 0 4px}
+.sub{color:#9da7b3;margin:0 0 22px}.cards{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 18px}
+.c{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;min-width:150px}
+.c b{display:block;font-size:12px;color:#6e7681;text-transform:uppercase;letter-spacing:.04em}.c span{font:700 24px/1.2 var(--mono)}
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:14px}
+th{color:#6e7681;font-size:12px;text-transform:uppercase}.n{text-align:right;font-family:var(--mono)}
+.red{color:#f85149}.green{color:#3fb950}.foot{color:#6e7681;font-size:12px;margin-top:22px}a{color:#2f81f7}</style></head>
+<body><div class="wrap">
+<h1>Raw LLM vs SPICE-verified</h1>
+<p class="sub">Same design tasks. A bare LLM picks component values with no check (red) vs AutoCDA's verify-in-the-loop (green) — both measured by the same ngspice oracle. <a href="/">playground</a></p>
+<div class="cards">
+ <div class="c"><b>Raw LLM — median error</b><span class="red">—%</span></div>
+ <div class="c"><b>AutoCDA — median error</b><span class="green">1.18%</span></div>
+ <div class="c"><b>Raw — worst</b><span class="red">—%</span></div>
+ <div class="c"><b>AutoCDA — worst</b><span class="green">1.9%</span></div>
+</div>
+<table><thead><tr><th>Circuit</th><th>Target</th><th class="n">Raw LLM err</th><th></th><th class="n">AutoCDA err</th></tr></thead><tbody><tr>
+  <td>rc_lowpass</td><td style="color:#6e7681">fc=1000</td>
+  <td class="n" style="color:#f85149">FAILED</td>
+  <td style="width:160px"></td>
+  <td class="n" style="color:#3fb950">0.52%</td>
+</tr><tr>
+  <td>rc_lowpass</td><td style="color:#6e7681">fc=4700</td>
+  <td class="n" style="color:#f85149">FAILED</td>
+  <td style="width:160px"></td>
+  <td class="n" style="color:#3fb950">0.61%</td>
+</tr><tr>
+  <td>rc_highpass</td><td style="color:#6e7681">fc=500</td>
+  <td class="n" style="color:#f85149">FAILED</td>
+  <td style="width:160px"></td>
+  <td class="n" style="color:#3fb950">1.18%</td>
+</tr><tr>
+  <td>voltage_divider</td><td style="color:#6e7681">Vin=12, Vout=5</td>
+  <td class="n" style="color:#f85149">FAILED</td>
+  <td style="width:160px"></td>
+  <td class="n" style="color:#3fb950">1.23%</td>
+</tr><tr>
+  <td>voltage_divider</td><td style="color:#6e7681">Vin=9, Vout=3.3</td>
+  <td class="n" style="color:#f85149">FAILED</td>
+  <td style="width:160px"></td>
+  <td class="n" style="color:#3fb950">1.90%</td>
+</tr></tbody></table>
+<p class="foot">Generated 2026-10-08 · raw-LLM via meta-llama/llama-3.3-70b-instruct:free · 5 raw call(s) failed to produce a usable design. Reproduce: <code>node --import ./server/loader.mjs scripts/rawVsVerified.mjs</code>. The point isn't that the LLM is dumb — it's that nothing tells you which of its answers are wrong. The oracle does.</p>
+</div></body></html>

@@ -205,13 +205,14 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...cors });
     return res.end(PLAYGROUND_HTML);
   }
-  if (req.method === "GET" && url.pathname === "/benchmark") {
+  if (req.method === "GET" && (url.pathname === "/benchmark" || url.pathname === "/compare")) {
+    const which = url.pathname === "/compare" ? "compare" : "benchmark";
     try {
-      const file = new URL("../docs/benchmark.html", import.meta.url);
+      const file = new URL(`../docs/${which}.html`, import.meta.url);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...cors });
       return res.end(fs.readFileSync(file));
     } catch {
-      return send(404, { ok: false, error: "benchmark page not generated — run `npm run benchmark`" });
+      return send(404, { ok: false, error: `${which} page not generated — run \`npm run ${which}\`` });
     }
   }
   if (req.method === "GET" && url.pathname === "/api/openapi.json")

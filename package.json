@@ -40,7 +40,8 @@
     "verify-api": "node --import ./server/loader.mjs server/apiServer.mjs",
     "mcp": "node --import ./server/loader.mjs server/mcpServer.mjs",
     "benchmark": "node --import ./server/loader.mjs scripts/benchmark.mjs",
-    "llm-benchmark": "node --import ./server/loader.mjs scripts/llmBenchmark.mjs"
+    "llm-benchmark": "node --import ./server/loader.mjs scripts/llmBenchmark.mjs",
+    "compare": "node --import ./server/loader.mjs scripts/rawVsVerified.mjs"
   },
   "browserslist": {
     "production": [
