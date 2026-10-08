@@ -1,4 +1,4 @@
-import { E12, E24, E96, snap, neighbors, synthesizeResistor } from "./eseries";
+import { E12, E24, E96, snap, neighbors, synthesizeResistor, synthesizeCapacitor, synthesizePart } from "./eseries";
 
 describe("E-series tables", () => {
   test("correct lengths", () => {
@@ -78,8 +78,6 @@ describe("synthesizeResistor()", () => {
 });
 
 describe("synthesizeCapacitor() (B3)", () => {
-  const { synthesizeCapacitor, synthesizePart } = require("./eseries");
-
   test("beats the single-part floor for an awkward capacitance", () => {
     const target = 1.37e-8; // 13.7 nF, between E24 values
     const single = snap(target, "E24");

@@ -218,7 +218,7 @@ as an API and an MCP tool, lets other agents stop guessing component values.
 ## Reproducibility
 
 - Parser/benchmark numbers: `npm run benchmark` (regenerates `docs/benchmark.html`).
-- Convergence guarantees: `CI=true npx react-scripts test` (`reasoningStress.test.js`).
+- Convergence guarantees: `npm test` (`reasoningStress.test.js`).
 - Measurements: `npm run verify-api`, then `POST /api/verify`, or the MCP server.
 - Code map: oracle `src/sim/spice.js`; measurement `src/sim/measure.js`,
   `src/sim/transient.js`; design loop `src/agents/reasoningAgent.js`; topology gate

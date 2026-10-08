@@ -167,7 +167,7 @@ to end — the path from a fixed menu toward "any circuit".
 ## Tests
 
 ```bash
-CI=true npx react-scripts test        # 91 tests, 11 suites — no key, no wasm needed
+npm test                              # 316 tests (Vitest) — no key, no wasm needed
 ```
 
 In-browser dev hooks run the real-ngspice benchmarks (open the console):

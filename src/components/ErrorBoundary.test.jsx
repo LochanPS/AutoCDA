@@ -17,7 +17,7 @@ describe("ErrorBoundary", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     // React logs caught errors to console.error; silence it for clean output.
-    errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -55,7 +55,7 @@ describe("ErrorBoundary", () => {
   });
 
   test("Start over calls onReset", () => {
-    const onReset = jest.fn();
+    const onReset = vi.fn();
     const root = createRoot(container);
     act(() => { root.render(<ErrorBoundary onReset={onReset}><Boom boom={true} /></ErrorBoundary>); });
     const btn = container.querySelector("button");

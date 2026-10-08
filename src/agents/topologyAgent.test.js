@@ -35,7 +35,7 @@ describe("heuristicTopologyProposer (offline, regex-backed)", () => {
 
 describe("proposeAndVerify — known-type path (full loop via injected orchestrate)", () => {
   test("accepts when the verify loop converges", async () => {
-    const fakeOrch = jest.fn(async () => ({
+    const fakeOrch = vi.fn(async () => ({
       converged: true, measured: 1000, targetValue: 1000, targetName: "fc", errorPct: 0, errors: [],
     }));
     const out = await proposeAndVerify({
@@ -50,7 +50,7 @@ describe("proposeAndVerify — known-type path (full loop via injected orchestra
   });
 
   test("rejects when the loop cannot converge — simulator has the final word", async () => {
-    const fakeOrch = jest.fn(async () => ({
+    const fakeOrch = vi.fn(async () => ({
       converged: false, measured: 1300, targetValue: 1000, targetName: "fc", errorPct: 0.3, errors: [],
     }));
     const out = await proposeAndVerify({

@@ -1,4 +1,4 @@
-import { mapToSpec, parseWithLLM } from "./llmParser";
+import { mapToSpec, parseWithLLM, extractJsonObject, extractSpecArgs } from "./llmParser";
 
 describe("mapToSpec", () => {
   test("maps a voltage divider (\"step 9 volts down to about 3v3\")", () => {
@@ -81,8 +81,6 @@ describe("parseWithLLM", () => {
 });
 
 describe("extractJsonObject (free-model JSON mode)", () => {
-  const { extractJsonObject, extractSpecArgs } = require("./llmParser");
-
   test("plain JSON", () => {
     expect(extractJsonObject('{"type":"rc_lowpass","targets":{"fc":1000},"confidence":0.9}'))
       .toEqual({ type: "rc_lowpass", targets: { fc: 1000 }, confidence: 0.9 });
