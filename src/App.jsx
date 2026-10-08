@@ -43,6 +43,9 @@ const BOM_PRICE_SOURCE = process.env.REACT_APP_PRICING_PROXY
 import { runToleranceSweep } from "./design/montecarlo";
 import { optimizeMulti } from "./design/optimize";
 import { parametricSearch } from "./design/paramSearch";
+import { annotateAvailability } from "./design/availability";
+import { proposeVerifiedSubstitutes } from "./design/substitutes";
+import { dominantRef } from "./design/loop";
 import { usePro } from "./pro/ProContext";
 import { ProButton, ProUpsell, ProGate } from "./pro/ProUI";
 
@@ -1786,6 +1789,74 @@ function downloadText(filename, text, mime = "text/csv;charset=utf-8") {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+// C4: SPICE-verified substitutes for the design's dominant part — nearby buyable
+// values re-simulated in the browser, so a swap (for a scarce/expensive part) is
+// still within spec. The simulator decides, not a datasheet match.
+function SubstitutesPanel({ circuit }) {
+  const v = circuit.verification;
+  const [status, setStatus] = useState("idle"); // idle | loading | done | error
+  const [subs, setSubs] = useState(null);
+
+  if (!v?.verifiable) return null;
+  const dom = dominantRef(circuit.id);
+  if (!dom) return null;
+  const comp = (circuit.components || []).find((c) => c.ref === dom);
+  const unit = comp?.unit;
+  const fmtVal = (val) => (unit === "F" ? formatCapacitance(val) : unit === "Ω" ? formatResistance(val) : String(val));
+  const tol = v.tolerance ?? 0.05;
+
+  const run = async () => {
+    setStatus("loading"); setSubs(null);
+    try {
+      const options = await proposeVerifiedSubstitutes({
+        type: circuit.id, targets: v.targets, components: circuit.components,
+        ref: dom, tolerance: tol, within: Math.max(tol, 0.03), max: 6, runSpice,
+      });
+      setSubs(options); setStatus("done");
+    } catch { setStatus("error"); }
+  };
+
+  const td = { padding: "7px 18px", fontSize: "var(--fs-sm)", borderBottom: "1px solid var(--border)" };
+  const tdR = { ...td, textAlign: "right", fontFamily: "var(--font-mono)" };
+  const th = { ...td, textAlign: "left", color: "var(--text-3)", fontSize: "var(--fs-xs)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 };
+
+  return (
+    <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", padding: "9px 18px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>
+          Need an alternative for <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-2)" }}>{dom}</span> ({comp ? fmtVal(comp.rawValue) : ""})? Find buyable values that still verify ≤ {(tol * 100).toFixed(0)}%.
+        </span>
+        <button onClick={run} disabled={status === "loading"}
+          style={{ background: status === "loading" ? "var(--surface)" : "var(--accent)", border: "none", borderRadius: "var(--r-sm)", color: status === "loading" ? "var(--text-3)" : "#fff", fontSize: "var(--fs-xs)", fontWeight: 600, padding: "6px 12px", cursor: status === "loading" ? "progress" : "pointer" }}>
+          {status === "loading" ? "Verifying…" : "Find verified substitutes"}
+        </button>
+      </div>
+      {status === "error" && <div style={{ padding: "0 18px 10px", fontSize: "var(--fs-xs)", color: "var(--danger)" }}>Couldn't run substitutes.</div>}
+      {status === "done" && subs && (
+        subs.length === 0 ? (
+          <div style={{ padding: "0 18px 12px", fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>
+            No drop-in value within tolerance for {dom} (common for a coarse-E24 capacitor — trim the partner resistor instead).
+          </div>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr><th style={th}>{dom} value</th><th style={{ ...th, textAlign: "right" }}>Δ</th><th style={{ ...th, textAlign: "right" }}>Measured err</th><th style={{ ...th, textAlign: "right" }}>Verdict</th></tr></thead>
+            <tbody>
+              {subs.map((s, i) => (
+                <tr key={i}>
+                  <td className="tnum" style={{ ...td, color: "var(--text)" }}>{fmtVal(s.value)}</td>
+                  <td className="tnum" style={tdR}>{s.deltaPct > 0 ? "+" : ""}{s.deltaPct}%</td>
+                  <td className="tnum" style={{ ...tdR, color: s.ok ? "var(--success)" : "var(--warn)" }}>{s.errorPct == null ? "—" : `${(s.errorPct * 100).toFixed(2)}%`}</td>
+                  <td style={{ ...tdR, color: s.ok ? "var(--success)" : "var(--text-3)", fontSize: "var(--fs-xs)" }}>{s.ok ? "✓ verified" : "out of spec"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
+      )}
+    </div>
+  );
+}
+
 // Bill of materials: buyable parts, MPNs, quantities, and total cost.
 function BomPanel({ circuit }) {
   const [open, setOpen] = useState(true);
@@ -1944,6 +2015,21 @@ function BomPanel({ circuit }) {
             </tr>
           </tbody>
         </table>
+        {(() => {
+          // C3: stock / lead-time roll-up (works on the catalog defaults too).
+          const avail = annotateAvailability(bom);
+          return (
+            <div style={{ padding: "9px 18px", borderTop: "1px solid var(--border)", background: "var(--surface-2)", fontSize: "var(--fs-xs)", display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+              <span style={{ color: avail.allInStock ? "var(--success)" : "var(--warn)", fontWeight: 600 }}>
+                {avail.allInStock
+                  ? `✓ All parts in stock${avail.orderLeadDays != null ? ` · order ships in ~${avail.orderLeadDays} day${avail.orderLeadDays === 1 ? "" : "s"}` : ""}`
+                  : `⚠ ${avail.outOfStock.length} part${avail.outOfStock.length === 1 ? "" : "s"} out of stock (${avail.outOfStock.join(", ")})`}
+                {avail.moqInflated.length > 0 && <span style={{ color: "var(--text-3)", fontWeight: 400 }}> · MOQ forces extra on {avail.moqInflated.join(", ")}</span>}
+              </span>
+            </div>
+          );
+        })()}
+        <SubstitutesPanel circuit={circuit} />
         {(landed || (summary && (summary.savings > 0 || summary.sellers.length > 1))) && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "10px 18px", borderTop: "1px solid var(--border)", background: "var(--surface-2)", flexWrap: "wrap" }}>
             {summary && summary.sellers.length > 0 ? (
