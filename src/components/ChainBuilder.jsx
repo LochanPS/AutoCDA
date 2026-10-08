@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from "react";
 import ResultPlot from "./ResultPlot";
 import { runSpice } from "../sim/spice";
-import { composeCircuit, verifyComposition, checkImpedanceMatch, perStageErrors } from "../design/compose";
+import { composeGraph, verifyGraph, checkImpedanceMatch, perStageErrors } from "../design/compose";
 import { buildBOM } from "../design/bom";
 import { SUPPORTED_TYPES } from "../spec/circuitSpec";
 
@@ -45,35 +45,44 @@ function defaultStage(type) {
 const fmtHz = (f) => (f == null ? "n/a" : f >= 1e6 ? `${+(f / 1e6).toPrecision(3)} MHz` : f >= 1e3 ? `${+(f / 1e3).toPrecision(3)} kHz` : `${+f.toPrecision(3)} Hz`);
 const fmtMeasured = (kind, v) => (v == null ? "n/a" : kind === "cutoff" ? fmtHz(v) : `${+v.toPrecision(4)}×`);
 
+// Each stage has an input source `from`: "in" (the chain input, a root) or the
+// index of an EARLIER stage it reads (acyclic by construction). Two stages reading
+// the same source = a fan-out branch. Structural edits re-link to a valid source.
+const normalizeFroms = (arr) =>
+  arr.map((s, i) => {
+    if (i === 0) return { ...s, from: "in" };
+    const f = s.from;
+    if (f === "in") return s;
+    return typeof f === "number" && f >= 0 && f < i ? s : { ...s, from: i - 1 };
+  });
+
 export default function ChainBuilder() {
   const [stages, setStages] = useState(() => [
-    defaultStage("rc_lowpass"),
-    defaultStage("opamp_noninverting"),
+    { ...defaultStage("rc_lowpass"), from: "in" },
+    { ...defaultStage("opamp_noninverting"), from: 0 },
   ]);
   const [rawInputs, setRawInputs] = useState({}); // "si-field" -> raw text while editing
   const [error, setError] = useState("");
   const [running, setRunning] = useState(false);
-  const [out, setOut] = useState(null); // { composition, v, bom }
+  const [out, setOut] = useState(null); // { graph, outs, bom, impedance, perStage }
 
-  const setStage = useCallback((i, next) => {
-    setStages((prev) => prev.map((s, j) => (j === i ? next : s)));
-    setError("");
-  }, []);
-
-  const changeType = (i, type) => { setStage(i, defaultStage(type)); };
+  const changeType = (i, type) =>
+    setStages((prev) => prev.map((s, j) => (j === i ? { ...defaultStage(type), from: s.from } : s)));
+  const changeFrom = (i, val) =>
+    setStages((prev) => prev.map((s, j) => (j === i ? { ...s, from: val === "in" ? "in" : Number(val) } : s)));
   const changeField = (i, field, raw) => {
     setRawInputs((p) => ({ ...p, [`${i}-${field}`]: raw }));
     const n = parseEng(raw);
     setStages((prev) => prev.map((s, j) => (j === i ? { ...s, targets: { ...s.targets, [field]: n == null ? NaN : n } } : s)));
     setError("");
   };
-  const addStage = () => { setStages((p) => [...p, defaultStage("opamp_noninverting")]); setError(""); };
-  const removeStage = (i) => { setStages((p) => p.filter((_, j) => j !== i)); setOut(null); setError(""); };
+  const addStage = () => { setStages((p) => [...p, { ...defaultStage("opamp_noninverting"), from: p.length ? p.length - 1 : "in" }]); setError(""); };
+  const removeStage = (i) => { setStages((p) => normalizeFroms(p.filter((_, j) => j !== i))); setOut(null); setError(""); };
   const move = (i, dir) => {
     setStages((p) => {
       const j = i + dir;
       if (j < 0 || j >= p.length) return p;
-      const n = [...p]; [n[i], n[j]] = [n[j], n[i]]; return n;
+      const n = [...p]; [n[i], n[j]] = [n[j], n[i]]; return normalizeFroms(n);
     });
     setOut(null);
   };
@@ -95,13 +104,17 @@ export default function ChainBuilder() {
     }
 
     setRunning(true);
-    let composition, v, impedance, perStage;
+    // Edges from each stage's `from`: a non-"in" source is an incoming link; stages
+    // sharing a source fan out. composeGraph measures every terminal (no outgoing).
+    const specs = stages.map((s) => ({ type: s.type, targets: s.targets }));
+    const edges = [];
+    stages.forEach((s, i) => { if (i > 0 && s.from !== "in" && typeof s.from === "number" && s.from < i) edges.push([s.from, i]); });
+
+    let graph, vg, impedance, perStage;
     try {
-      const specs = stages.map((s) => ({ type: s.type, targets: s.targets }));
-      composition = composeCircuit(specs);
-      v = await verifyComposition(composition, { runSpice });
-      // A2 composition depth: inter-stage loading check + per-stage attribution.
-      impedance = checkImpedanceMatch(specs);
+      graph = composeGraph({ stages: specs, edges });
+      vg = await verifyGraph(graph, { runSpice });
+      impedance = checkImpedanceMatch(specs, { edges });
       perStage = await perStageErrors(specs, { runSpice });
     } catch (e) {
       setRunning(false);
@@ -109,8 +122,8 @@ export default function ChainBuilder() {
       setError(`Couldn't build or verify the chain${detail ? ` (${detail})` : ""}.`);
       return;
     }
-    const bom = buildBOM(composition.components);
-    setOut({ composition, v, bom, impedance, perStage });
+    const bom = buildBOM(graph.components);
+    setOut({ graph, edges, outs: vg.outputs, result: vg.result, errors: vg.errors, bom, impedance, perStage });
     setRunning(false);
   }, [stages, running]);
 
@@ -119,8 +132,9 @@ export default function ChainBuilder() {
       <div style={{ ...card, padding: "16px 18px" }}>
         <div style={{ fontSize: "var(--fs-h2)", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>Build a chain</div>
         <div style={{ fontSize: "var(--fs-sm)", color: "var(--text-2)", lineHeight: 1.55, maxWidth: "70ch" }}>
-          Stack SPICE-verified building blocks into one signal chain. Each stage drives the next; AutoCDA designs every stage,
-          wires them into a single ngspice deck, and measures the <strong>end-to-end</strong> response — the honest, composed result.
+          Stack SPICE-verified building blocks into one circuit. Chain them in series, or set a stage's <strong>Input from</strong> an
+          earlier stage to <strong>branch</strong> (one source feeding several paths). AutoCDA designs every stage, wires them into a
+          single ngspice deck, and measures each <strong>output</strong> end-to-end — plus per-stage error and inter-stage loading.
         </div>
       </div>
 
@@ -138,6 +152,14 @@ export default function ChainBuilder() {
                   {CHAIN_TYPES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </Labeled>
+              {i > 0 && (
+                <Labeled label="Input from">
+                  <select value={s.from === "in" ? "in" : String(s.from)} onChange={(e) => { changeFrom(i, e.target.value); setOut(null); }} style={{ ...selectStyle, minWidth: "120px" }}>
+                    <option value="in">Input (branch)</option>
+                    {stages.slice(0, i).map((_, j) => <option key={j} value={j}>Stage {j + 1}</option>)}
+                  </select>
+                </Labeled>
+              )}
               {fieldsFor(s.type).map((f) => {
                 const meta = FIELD_META[f] || { label: f, unit: "" };
                 const key = `${i}-${f}`;
@@ -185,42 +207,37 @@ export default function ChainBuilder() {
   );
 }
 
-const FILTER_RE = /lowpass|highpass|band_pass|integrator|differentiator|sallen|fourth_order/;
-
 const fmtOhm = (r) => (r == null ? "n/a" : r >= 1e9 ? "≈∞ (op-amp in)" : r >= 1e6 ? `${+(r / 1e6).toPrecision(3)} MΩ` : r >= 1e3 ? `${+(r / 1e3).toPrecision(3)} kΩ` : `${Math.round(r)} Ω`);
 
 function ChainResults({ out }) {
-  const { composition, v, bom, impedance, perStage } = out;
-  const kind = composition.measureKind;
-  const filterStages = composition.stages.filter((s) => FILTER_RE.test(s.type)).length;
-  // The closed-form prediction is only trustworthy for pure-gain cascades and for
-  // a single filter stage. With ≥2 filters, stages load and interact — the naive
-  // "dominant corner" misses it, so we defer to the SPICE-measured value instead
-  // of printing a number that looks wrong next to the real one.
-  const predReliable = kind === "gain" || filterStages <= 1;
-  const predicted = kind === "gain" ? composition.predicted.totalGain : composition.predicted.dominantCorner;
+  const { graph, outs, result, errors, bom, impedance, perStage } = out;
+  const partsCount = graph.components.filter((c) => c.unit === "Ω" || c.unit === "F").length;
+  const multi = outs.length > 1;
 
   return (
     <>
       <div style={card}>
         <div style={cardHead}>
-          <span style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}>End-to-end result</span>
-          <span style={badge}>{composition.stages.length} stages · SPICE-measured</span>
+          <span style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}>
+            {multi ? `${outs.length} outputs` : "End-to-end result"} · SPICE-measured
+          </span>
+          <span style={badge}>{graph.stages.length} stages{multi ? " · branched" : ""}</span>
         </div>
         <div style={{ padding: "16px", display: "flex", flexWrap: "wrap", gap: "16px 40px" }}>
-          <Stat label={`Measured ${kind === "gain" ? "gain" : "corner"}`} value={fmtMeasured(kind, v.measured)} accent="var(--success)" />
-          <Stat label="Predicted (closed-form)" value={predReliable ? (predicted == null ? "n/a" : fmtMeasured(kind, predicted)) : "—"} />
+          {outs.map((o) => (
+            <Stat
+              key={o.node}
+              label={`${multi ? `Stage ${o.stageIndex + 1} ` : "Measured "}${o.kind === "gain" ? "gain" : "corner"}`}
+              value={fmtMeasured(o.kind, o.measured)}
+              accent="var(--success)"
+            />
+          ))}
           <Stat label="BOM / unit" value={`$${bom.total.toFixed(3)}`} />
-          <Stat label="Parts" value={String(composition.components.filter((c) => c.unit === "Ω" || c.unit === "F").length)} />
+          <Stat label="Parts" value={String(partsCount)} />
         </div>
-        {!predReliable && (
-          <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)", padding: "9px 16px", fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>
-            {filterStages} filter stages cascade and load each other — no simple closed form for the combined corner. The SPICE-measured value is the real one.
-          </div>
-        )}
-        {v.errors && v.errors.length > 0 && (
+        {errors && errors.length > 0 && (
           <div style={{ borderTop: "1px solid var(--border)", background: "var(--warn-soft)", padding: "10px 16px", fontSize: "var(--fs-xs)", color: "var(--warn)", whiteSpace: "pre-wrap", fontFamily: "var(--font-mono, monospace)" }}>
-            {v.errors.slice(0, 4).join("\n")}
+            {errors.slice(0, 4).join("\n")}
           </div>
         )}
       </div>
@@ -285,16 +302,16 @@ function ChainResults({ out }) {
       )}
 
       <div style={card}>
-        <div style={cardHead}><span style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}>Combined schematic</span></div>
+        <div style={cardHead}><span style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}>{multi ? "Block diagram (branched)" : "Combined schematic"}</span></div>
         <div style={{ padding: "16px", overflowX: "auto" }}>
-          <BlockDiagram stages={composition.stages} />
+          <BlockDiagram stages={graph.stages} edges={graph.edges} outputs={outs} />
         </div>
       </div>
 
       <div style={card}>
-        <div style={cardHead}><span style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}>Combined response (node: out)</span></div>
+        <div style={cardHead}><span style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--text)" }}>Combined response</span></div>
         <div style={{ padding: "12px 10px" }}>
-          {v.result ? <ResultPlot result={v.result} height={300} maxNodes={2} /> : <div style={{ padding: "20px", color: "var(--text-3)" }}>No plot data.</div>}
+          {result ? <ResultPlot result={result} height={300} maxNodes={Math.max(2, outs.length + 1)} /> : <div style={{ padding: "20px", color: "var(--text-3)" }}>No plot data.</div>}
         </div>
       </div>
 
@@ -326,19 +343,39 @@ function ChainResults({ out }) {
 
       <details style={{ ...card, padding: 0 }}>
         <summary style={{ padding: "13px 16px", cursor: "pointer", fontSize: "var(--fs-sm)", fontWeight: 600, color: "var(--text-2)" }}>Composed ngspice deck</summary>
-        <pre style={{ margin: 0, padding: "0 16px 16px", fontSize: "12px", color: "var(--text-2)", fontFamily: "var(--font-mono, monospace)", whiteSpace: "pre-wrap" }}>{composition.netlist}</pre>
+        <pre style={{ margin: 0, padding: "0 16px 16px", fontSize: "12px", color: "var(--text-2)", fontFamily: "var(--font-mono, monospace)", whiteSpace: "pre-wrap" }}>{graph.netlist}</pre>
       </details>
     </>
   );
 }
 
-// Honest block-level schematic of the chain: one labelled box per verified stage,
-// wired in series from the input source to the output node.
-function BlockDiagram({ stages }) {
-  const boxW = 150, boxH = 66, gap = 46, padL = 70, padR = 60, top = 24;
-  const width = padL + stages.length * boxW + (stages.length - 1) * gap + padR;
-  const height = top + boxH + 54;
-  const cy = top + boxH / 2;
+// Block-level schematic, branching-aware: stages are placed in columns by their
+// depth from the input (longest path), stacked within a column, and wired from
+// each stage's source output to its input. Every terminal (no outgoing edge) gets
+// an output tap. One labelled box per verified stage.
+function BlockDiagram({ stages, edges, outputs }) {
+  const n = stages.length;
+  const boxW = 150, boxH = 60, hgap = 56, vgap = 20, padL = 72, padR = 70, top = 18;
+
+  const pred = Array(n).fill(null);
+  (edges || []).forEach(([a, b]) => { pred[b] = a; });
+  const depth = Array(n).fill(0);
+  for (let i = 0; i < n; i++) depth[i] = pred[i] == null ? 0 : depth[pred[i]] + 1;
+  const cols = Math.max(...depth, 0) + 1;
+  const rowOf = Array(n).fill(0);
+  const colCount = Array(cols).fill(0);
+  for (let i = 0; i < n; i++) rowOf[i] = colCount[depth[i]]++;
+  const maxRows = Math.max(...colCount, 1);
+  const outSet = new Set((outputs || []).map((o) => o.stageIndex));
+
+  const colX = (d) => padL + d * (boxW + hgap);
+  const rowY = (r) => top + r * (boxH + vgap);
+  const boxX = (i) => colX(depth[i]);
+  const boxY = (i) => rowY(rowOf[i]);
+  const midY = (i) => boxY(i) + boxH / 2;
+  const width = padL + cols * boxW + (cols - 1) * hgap + padR;
+  const height = top + maxRows * boxH + Math.max(0, maxRows - 1) * vgap + 16;
+  const inX = 32, inY = top + boxH / 2;
 
   const targetLabel = (s) => {
     if (s.targets.fc != null) return fmtHz(s.targets.fc);
@@ -350,42 +387,44 @@ function BlockDiagram({ stages }) {
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} width={Math.max(width, 480)} height={height} style={{ maxWidth: "none" }} xmlns="http://www.w3.org/2000/svg">
-      {/* source */}
-      <circle cx={34} cy={cy} r={16} fill="none" stroke="var(--accent)" strokeWidth="2" />
-      <text x={34} y={cy - 2} textAnchor="middle" fontSize="9" fill="var(--text-2)">~</text>
-      <text x={34} y={cy + 9} textAnchor="middle" fontSize="9" fill="var(--text-2)">Vin</text>
-      <line x1={50} y1={cy} x2={padL} y2={cy} stroke="var(--accent)" strokeWidth="1.5" />
+      {/* input source */}
+      <circle cx={inX} cy={inY} r={14} fill="none" stroke="var(--accent)" strokeWidth="2" />
+      <text x={inX} y={inY - 1} textAnchor="middle" fontSize="9" fill="var(--text-2)">~</text>
+      <text x={inX} y={inY + 9} textAnchor="middle" fontSize="8" fill="var(--text-2)">Vin</text>
 
+      {/* edges: source output → stage input (elbow) */}
       {stages.map((s, i) => {
-        const x = padL + i * (boxW + gap);
+        const sx = pred[i] == null ? inX + 14 : boxX(pred[i]) + boxW;
+        const sy = pred[i] == null ? inY : midY(pred[i]);
+        const tx = boxX(i), ty = midY(i);
+        const mx = (sx + tx) / 2;
+        return (
+          <g key={`e${i}`}>
+            <path d={`M ${sx} ${sy} H ${mx} V ${ty} H ${tx}`} fill="none" stroke="var(--accent)" strokeWidth="1.5" />
+            <polygon points={`${tx},${ty} ${tx - 7},${ty - 4} ${tx - 7},${ty + 4}`} fill="var(--accent)" />
+          </g>
+        );
+      })}
+
+      {/* stage boxes + output taps */}
+      {stages.map((s, i) => {
+        const x = boxX(i), y = boxY(i);
         return (
           <g key={i}>
-            <rect x={x} y={top} width={boxW} height={boxH} rx="8" fill="var(--surface-2)" stroke="var(--accent)" strokeWidth="1.5" />
-            <text x={x + boxW / 2} y={top + 20} textAnchor="middle" fontSize="11" fontWeight="600" fill="var(--text)">Stage {i + 1}</text>
-            <text x={x + boxW / 2} y={top + 38} textAnchor="middle" fontSize="11" fill="var(--text)">{shortName(s.type)}</text>
-            <text x={x + boxW / 2} y={top + 54} textAnchor="middle" fontSize="10" fill="var(--text-3)">{targetLabel(s)}</text>
-            {i < stages.length - 1 && (
+            <rect x={x} y={y} width={boxW} height={boxH} rx="8" fill="var(--surface-2)" stroke="var(--accent)" strokeWidth="1.5" />
+            <text x={x + boxW / 2} y={y + 17} textAnchor="middle" fontSize="11" fontWeight="600" fill="var(--text)">Stage {i + 1}</text>
+            <text x={x + boxW / 2} y={y + 34} textAnchor="middle" fontSize="11" fill="var(--text)">{shortName(s.type)}</text>
+            <text x={x + boxW / 2} y={y + 50} textAnchor="middle" fontSize="10" fill="var(--text-3)">{targetLabel(s)}</text>
+            {outSet.has(i) && (
               <>
-                <line x1={x + boxW} y1={cy} x2={x + boxW + gap} y2={cy} stroke="var(--accent)" strokeWidth="1.5" />
-                <polygon points={`${x + boxW + gap},${cy} ${x + boxW + gap - 7},${cy - 4} ${x + boxW + gap - 7},${cy + 4}`} fill="var(--accent)" />
-                <text x={x + boxW + gap / 2} y={cy - 8} textAnchor="middle" fontSize="9" fill="var(--text-3)">n{i + 1}</text>
+                <line x1={x + boxW} y1={y + boxH / 2} x2={x + boxW + 22} y2={y + boxH / 2} stroke="var(--accent)" strokeWidth="1.5" />
+                <circle cx={x + boxW + 24} cy={y + boxH / 2} r={4} fill="#1a7f42" />
+                <text x={x + boxW + 24} y={y + boxH / 2 - 9} textAnchor="middle" fontSize="9" fill="#1a7f42">out</text>
               </>
             )}
           </g>
         );
       })}
-
-      {/* output */}
-      {(() => {
-        const lastX = padL + (stages.length - 1) * (boxW + gap) + boxW;
-        return (
-          <g>
-            <line x1={lastX} y1={cy} x2={lastX + padR - 18} y2={cy} stroke="var(--accent)" strokeWidth="1.5" />
-            <circle cx={lastX + padR - 16} cy={cy} r={4} fill="#1a7f42" />
-            <text x={lastX + padR - 16} y={cy - 10} textAnchor="middle" fontSize="10" fill="#1a7f42">out</text>
-          </g>
-        );
-      })()}
     </svg>
   );
 }
