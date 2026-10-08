@@ -45,6 +45,7 @@ import { optimizeMulti } from "./design/optimize";
 import { parametricSearch } from "./design/paramSearch";
 import { annotateAvailability } from "./design/availability";
 import { proposeVerifiedSubstitutes } from "./design/substitutes";
+import { buildDistributorBom } from "./design/distributorBom";
 import { dominantRef } from "./design/loop";
 import { usePro } from "./pro/ProContext";
 import { ProButton, ProUpsell, ProGate } from "./pro/ProUI";
@@ -1900,7 +1901,16 @@ function BomPanel({ circuit }) {
   const handleDownloadCsv = () => {
     try { downloadText(`autocda-bom-${circuit.id || "design"}.csv`, buildBomCsv(bom)); } catch { /* ignore */ }
   };
-  const importers = DISTRIBUTORS.filter((d) => d.importer);
+  // C6: one hop to buy — download the BOM in a distributor's own import format,
+  // then open that distributor's BOM importer ready to receive it.
+  const sendToDistributor = (id) => {
+    try {
+      const f = buildDistributorBom(bom, id);
+      downloadText(f.filename, f.text);
+      if (f.importer && typeof window !== "undefined") window.open(f.importer, "_blank", "noopener,noreferrer");
+    } catch { /* ignore */ }
+  };
+  const DIST_IMPORTERS = [{ id: "mouser", label: "Mouser" }, { id: "digikey", label: "DigiKey" }, { id: "lcsc", label: "LCSC" }];
   const buyLinkStyle = { fontSize: "var(--fs-xs)", fontWeight: 600, color: "var(--accent)", textDecoration: "none", whiteSpace: "nowrap" };
 
   return (
@@ -1927,17 +1937,19 @@ function BomPanel({ circuit }) {
             {anyPriced ? "Compare sellers per part, cheapest first — buy from whichever you prefer." : "No live prices — search each part at any distributor."}
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-            {importers.length > 0 && (
-              <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>
-                Import full BOM to{" "}
-                {importers.map((d, k) => (
-                  <React.Fragment key={d.id}>
-                    {k > 0 ? " · " : " "}
-                    <a href={d.importer} target="_blank" rel="noopener noreferrer nofollow sponsored" style={buyLinkStyle}>{d.label}</a>
-                  </React.Fragment>
-                ))}
-              </span>
-            )}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-3)" }}>Send BOM to</span>
+              {DIST_IMPORTERS.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => sendToDistributor(d.id)}
+                  title={`Download the ${d.label}-format BOM CSV and open ${d.label}'s BOM importer`}
+                  style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", color: "var(--accent)", fontSize: "var(--fs-xs)", fontWeight: 600, padding: "5px 10px", cursor: "pointer" }}
+                >
+                  {d.label} ↗
+                </button>
+              ))}
+            </span>
             <ProGate feature="BOM export" label="Pro — export">
               <button
                 onClick={handleDownloadCsv}
