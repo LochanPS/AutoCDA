@@ -185,10 +185,12 @@ reproducibility. The oracle itself is ngspice [8].
 
 Coverage is anchored on templates plus the topology-proposal escape hatch (§2.4),
 whose real-world breadth still needs large-scale evaluation on human-written
-prompts; our 559-case benchmark is part-generated and should be broadened. The
-ideal-op-amp decks omit device non-idealities — stability margin, PSRR and output
-impedance need non-ideal models (the analyzers exist in `src/sim/metrics.js`; the
-models do not yet), so those metrics are reported only where a transient suffices.
+prompts; our 559-case benchmark is part-generated and should be broadened. A 2-pole op-amp
+macromodel (`src/sim/opampModel.js`) now yields real closed-loop bandwidth and
+phase/gain margin for the op-amp amplifiers (e.g. an inverting ×10 measures a
+100 kHz bandwidth and ~85° phase margin — numbers the ideal VCVS cannot produce);
+PSRR and slew rate still need a supply-referenced / slew-limited model, so those
+remain reported only where a transient suffices.
 Sourcing/landed-cost figures use illustrative default rates. The default proposer is
 the deterministic secant solver benchmarked above; the LLM proposer is a drop-in
 that makes the same next-value decision, offered as an ablation rather than required

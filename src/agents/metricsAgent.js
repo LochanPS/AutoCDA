@@ -17,6 +17,7 @@
 
 import { buildNetlist } from "./simulatorAgent";
 import { measureOscillation, measureTHD, measureLineRegulation, measureLoadRegulation, measureSettled } from "../sim/transient";
+import { collectOpampMetrics } from "../sim/opampModel";
 
 const num = (v) => Number(Number(v).toPrecision(6)).toString();
 
@@ -85,6 +86,13 @@ export async function collectMetrics({ type, targets, valueMap, runSpice }) {
       }
     }
     return Object.keys(m).length ? m : null;
+  }
+
+  if (type === "opamp_inverting" || type === "opamp_noninverting") {
+    // Non-ideal op-amp macromodel → closed-loop bandwidth + phase/gain margin,
+    // the numbers an ideal-VCVS deck can't produce. Each measure is wrapped and
+    // never fails the verified result.
+    return await safe(() => collectOpampMetrics({ type, valueMap, runSpice }));
   }
 
   return null;
