@@ -121,10 +121,25 @@ export function buildBOM(components) {
     const qty = g.refs.length;
     const lineTotal = +(g.unitPrice * qty).toFixed(4);
     total += lineTotal;
-    rows.push({ ref: g.refs.join(", "), value: g.value, mpn: g.mpn, unitPrice: g.unitPrice, qty, lineTotal });
+    const av = CATALOG_AVAIL[g.kind] || CATALOG_AVAIL.other;
+    rows.push({ ref: g.refs.join(", "), value: g.value, mpn: g.mpn, unitPrice: g.unitPrice, qty, lineTotal, ...av });
   }
   return { rows, total: +total.toFixed(4) };
 }
+
+// Illustrative catalog availability for the bundled static parts (like the static
+// prices, replaced by real distributor data once a live source is wired). Jellybean
+// 0603 passives are effectively always in stock, MOQ 1, a couple days; actives a
+// touch longer. Honest defaults, not fabricated specifics.
+const CATALOG_AVAIL = {
+  resistor: { stock: 100000, moq: 1, leadDays: 2 },
+  capacitor: { stock: 80000, moq: 1, leadDays: 2 },
+  led: { stock: 40000, moq: 1, leadDays: 3 },
+  diode: { stock: 50000, moq: 1, leadDays: 3 },
+  transistor: { stock: 30000, moq: 1, leadDays: 3 },
+  opamp: { stock: 15000, moq: 1, leadDays: 4 },
+  other: { stock: 10000, moq: 1, leadDays: 5 },
+};
 
 /**
  * Build a BOM and enrich it with live distributor pricing when a price source is

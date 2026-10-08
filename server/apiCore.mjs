@@ -22,6 +22,9 @@ import { parseWithLLM, selectProvider } from "../src/parse/llmParser.js";
 import { collectMetrics } from "../src/agents/metricsAgent.js";
 import { reproStamp } from "../src/sim/repro.js";
 import { landedCostINR, envLandedOpts } from "../src/design/sourcing.js";
+import { annotateAvailability } from "../src/design/availability.js";
+import { proposeVerifiedSubstitutes } from "../src/design/substitutes.js";
+import { dominantRef } from "../src/agents/simulatorAgent.js";
 import { runCorners } from "../src/design/corners.js";
 
 export { SUPPORTED_TYPES };
@@ -95,10 +98,32 @@ export async function runVerify(body) {
   // Sourcing (Theme C): the India landed cost no global distributor shows — parts +
   // customs duty + GST + shipping + forex. Pure/deterministic (no per-call network).
   const indiaLanded = landedCostINR(bom.total, envLandedOpts());
+  // C3: stock / MOQ / lead-time aware roll-up (when can the whole order ship).
+  const avail = annotateAvailability(bom);
   const sourcing = {
     bomUsd: bom.total,
     indiaLandedINR: indiaLanded,
+    availability: {
+      allInStock: avail.allInStock,
+      orderLeadDays: avail.orderLeadDays,
+      outOfStock: avail.outOfStock,
+      moqInflated: avail.moqInflated,
+      availableTotal: avail.availableTotal,
+    },
   };
+
+  // C4: SPICE-verified substitutes for the dominant part — opt-in ({ substitutes:true })
+  // since each candidate is re-simulated. Useful when a part is scarce/expensive.
+  let substitutes = null;
+  if (body.substitutes && res.verifiable) {
+    const dom = dominantRef(spec.type);
+    if (dom) {
+      try {
+        const options = await proposeVerifiedSubstitutes({ type: spec.type, targets: spec.targets, components: finalParts, ref: dom, tolerance: res.tolerance ?? 0.05, runSpice });
+        substitutes = { ref: dom, options };
+      } catch { substitutes = null; }
+    }
+  }
 
   // Corner & environment analysis (Theme B4) — opt-in (several extra SPICE runs).
   let corners = null;
@@ -130,6 +155,7 @@ export async function runVerify(body) {
       bom: { rows: bom.rows, total: bom.total },
       metrics,
       sourcing,
+      ...(substitutes ? { substitutes } : {}),
       repro,
       ...(corners ? { corners } : {}),
       netlist: circuit.netlist || null,

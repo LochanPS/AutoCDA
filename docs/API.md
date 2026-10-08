@@ -109,8 +109,17 @@ Response (abridged):
     "indiaLandedINR": {        // parts + customs duty + GST + shipping + forex
       "parts": 3.57, "duty": 0.36, "gst": 0.71, "shipping": 600, "total": 604.64,
       "rate": { "usdToInr": 83.5, "dutyPct": 0.10, "gstPct": 0.18, … }
+    },
+    "availability": {          // C3: stock / MOQ / lead-time aware
+      "allInStock": true, "orderLeadDays": 2,
+      "outOfStock": [], "moqInflated": [], "availableTotal": 0.042
     }
   },
+  // C4: only present with { "substitutes": true } in the request — SPICE-verified
+  // buyable alternatives for the dominant part (each re-simulated), verified first.
+  "substitutes": { "ref": "Rf", "options": [
+    { "value": 100000, "deltaPct": 0.0, "measured": 10.0, "errorPct": 0.0, "ok": true }, …
+  ] },
   "repro": {                   // auditable, re-runnable
     "engine": "ngspice (eecircuit-engine wasm)",
     "engineVersion": "1.8.0",
