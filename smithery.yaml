@@ -1,0 +1,12 @@
+# Smithery config — lets smithery.ai run the published npm MCP server.
+# No configuration needed: the server authenticates nothing and runs ngspice
+# in-process. (Optional env like OPENROUTER_API_KEY is server-side only and not
+# required for verify/parse/compose.)
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties: {}
+    additionalProperties: false
+  commandFunction: |-
+    (config) => ({ command: "npx", args: ["-y", "autocda-verify-mcp"] })

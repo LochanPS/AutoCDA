@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.LochanPS/autocda-verify-mcp",
+  "description": "SPICE-verified analog circuit design for AI agents: turn a plain-English intent into a real-ngspice-verified, buyable circuit — measured error, netlist, priced BOM, reproducibility stamp.",
+  "repository": {
+    "url": "https://github.com/LochanPS/AutoCDA",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "websiteUrl": "https://auto-cda-phi.vercel.app/",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "autocda-verify-mcp",
+      "version": "1.0.0",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}
