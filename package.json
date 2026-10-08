@@ -32,7 +32,8 @@
     "pricing-proxy": "node server/pricingProxy.js",
     "verify-api": "node --import ./server/loader.mjs server/apiServer.mjs",
     "mcp": "node --import ./server/loader.mjs server/mcpServer.mjs",
-    "benchmark": "node --import ./server/loader.mjs scripts/benchmark.mjs"
+    "benchmark": "node --import ./server/loader.mjs scripts/benchmark.mjs",
+    "llm-benchmark": "node --import ./server/loader.mjs scripts/llmBenchmark.mjs"
   },
   "browserslist": {
     "production": [

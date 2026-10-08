@@ -53,11 +53,12 @@ export function selectProvider() {
       name: "openrouter",
       key: or,
       url: "https://openrouter.ai/api/v1/chat/completions",
-      // Default to a FREE model so a $0 OpenRouter key works out of the box. Paid
-      // models (e.g. anthropic/claude-3.5-sonnet) need credits — set OPENROUTER_MODEL
-      // to one if you've funded the account. Free slugs rotate: see
-      // https://openrouter.ai/models?max_price=0
-      model: env("OPENROUTER_MODEL") || "meta-llama/llama-3.3-70b-instruct:free",
+      // Default to a currently-free model. NOTE: OpenRouter rotates which slugs are
+      // free and rate-limits them hard (429), so the free tier is fine for casual
+      // fallback (it degrades to regex on error) but not for a benchmark. A few $
+      // of credit unlocks paid models with normal limits. Browse current free slugs:
+      // https://openrouter.ai/models?max_price=0  — set OPENROUTER_MODEL to override.
+      model: env("OPENROUTER_MODEL") || "google/gemma-4-31b-it:free",
     };
   }
   const an = env("REACT_APP_ANTHROPIC_KEY");
